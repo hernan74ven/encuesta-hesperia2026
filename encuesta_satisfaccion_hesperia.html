@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Encuesta de Satisfacción · Hesperia Playa el Agua</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --sea:#0F4C4A;
+  --sea-deep:#0A3634;
+  --sand:#F0E6D2;
+  --sand-light:#FBF7EE;
+  --coral:#E8622C;
+  --coral-dark:#C94E1E;
+  --palm:#4C7A63;
+  --palm-light:#8FAE6B;
+  --gold:#D9A441;
+  --ink:#173330;
+  --foam:#FFFFFF;
+  --line:rgba(15,76,74,0.14);
+  --shadow:0 10px 30px rgba(10,54,52,0.12);
+}
+*{box-sizing:border-box;}
+body{margin:0;padding:0;background:var(--sand-light);color:var(--ink);font-family:'Inter',sans-serif;}
+.app{max-width:860px;margin:0 auto;min-height:100vh;background:var(--sand-light);position:relative;}
+
+.wave{display:block;width:100%;height:14px;}
+.wave path{fill:none;stroke-width:2.5;}
+
+header.top{background:var(--sea);color:var(--foam);padding:22px 20px 0;position:relative;}
+header.top .brand{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+header.top .brand h1{font-family:'Fraunces',serif;font-weight:600;font-size:1.35rem;margin:0;letter-spacing:.2px;}
+header.top .brand small{display:block;font-family:'Inter';font-weight:400;font-size:.72rem;opacity:.75;letter-spacing:.14em;text-transform:uppercase;margin-top:2px;}
+nav.tabs{display:flex;gap:4px;margin-top:18px;}
+nav.tabs button{flex:1;background:transparent;border:none;color:rgba(255,255,255,.68);font-family:'Inter';font-weight:600;font-size:.86rem;padding:10px 6px 14px;cursor:pointer;border-bottom:2px solid transparent;transition:.2s;}
+nav.tabs button.active{color:#fff;border-bottom:2px solid var(--coral);}
+nav.tabs button:hover{color:#fff;}
+.wave-under{width:100%;height:10px;color:var(--sand-light);}
+
+main{padding:22px 20px 60px;}
+
+.progress-wrap{margin-bottom:18px;}
+.progress-track{height:6px;background:var(--line);border-radius:4px;overflow:hidden;}
+.progress-fill{height:100%;background:var(--coral);border-radius:4px;transition:width .3s ease;}
+.progress-label{font-family:'IBM Plex Mono';font-size:.72rem;color:var(--palm);margin-top:6px;letter-spacing:.05em;}
+
+.step{display:none;}
+.step.active{display:block;animation:fadein .35s ease;}
+@keyframes fadein{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+.step-head{margin-bottom:18px;}
+.step-head .eyebrow{font-family:'IBM Plex Mono';font-size:.7rem;text-transform:uppercase;letter-spacing:.14em;color:var(--coral);}
+.step-head h2{font-family:'Fraunces',serif;font-size:1.6rem;margin:4px 0 2px;color:var(--sea-deep);}
+.step-head p{margin:0;color:var(--palm);font-size:.88rem;}
+
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:.82rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;}
+.field input, .field select, .field textarea{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:10px;font-family:'Inter';font-size:.95rem;background:#fff;color:var(--ink);}
+.field textarea{min-height:78px;resize:vertical;}
+.field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--coral);outline-offset:1px;border-color:var(--coral);}
+.field .hint{font-size:.72rem;color:var(--palm);margin-top:4px;}
+.field.error input, .field.error textarea{border-color:var(--coral);}
+.field .error-msg{font-size:.72rem;color:var(--coral);margin-top:4px;display:none;}
+.field.error .error-msg{display:block;}
+
+.qcard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 16px 14px;margin-bottom:14px;box-shadow:var(--shadow);transition:transform .15s ease,box-shadow .15s ease;}
+.qcard:hover{transform:translateY(-1px);box-shadow:0 12px 35px rgba(10,54,52,0.15);}
+.qcard .qtitle{font-size:.95rem;font-weight:600;color:var(--sea-deep);}
+.qcard .qtitle .en{font-weight:400;color:var(--palm);font-size:.78rem;}
+.rate-row{display:flex;gap:6px;margin-top:10px;}
+.rate-btn{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:9px 4px 7px;cursor:pointer;text-align:center;transition:all .15s ease;min-height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.rate-btn:active{transform:scale(0.95);}
+.rate-btn .num{display:block;font-family:'IBM Plex Mono';font-weight:600;font-size:1.05rem;color:var(--ink);}
+.rate-btn .lbl{display:block;font-size:.6rem;color:var(--palm);margin-top:2px;line-height:1.1;}
+.rate-btn.sel-1{background:var(--palm);border-color:var(--palm);}
+.rate-btn.sel-2{background:var(--palm-light);border-color:var(--palm-light);}
+.rate-btn.sel-3{background:var(--gold);border-color:var(--gold);}
+.rate-btn.sel-4{background:var(--coral);border-color:var(--coral);}
+.rate-btn.sel-5{background:var(--coral-dark);border-color:var(--coral-dark);}
+.rate-btn.selected .num, .rate-btn.selected .lbl{color:#fff;}
+
+.choice-row{display:flex;gap:10px;margin-top:8px;}
+.choice-btn{flex:1;padding:12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-weight:600;font-size:.9rem;cursor:pointer;color:var(--sea-deep);transition:all .15s ease;min-height:44px;}
+.choice-btn:active{transform:scale(0.97);}
+.choice-btn.selected{background:var(--sea);border-color:var(--sea);color:#fff;}
+
+.nav-buttons{display:flex;gap:10px;margin-top:26px;}
+.btn{border:none;border-radius:10px;padding:13px 20px;font-family:'Inter';font-weight:700;font-size:.9rem;cursor:pointer;letter-spacing:.01em;transition:all .15s ease;min-height:44px;}
+.btn:active{transform:scale(0.97);}
+.btn-primary{background:var(--coral);color:#fff;flex:1;}
+.btn-primary:hover{background:var(--coral-dark);}
+.btn-ghost{background:transparent;color:var(--sea);border:1.5px solid var(--line);}
+.btn-ghost:hover{border-color:var(--sea);}
+.btn-small{padding:8px 14px;font-size:.78rem;border-radius:8px;}
+
+.thanks{text-align:center;padding:40px 10px;}
+.thanks .wavefig{font-size:2.6rem;}
+.thanks h2{font-family:'Fraunces',serif;font-size:1.7rem;color:var(--sea-deep);}
+.thanks p{color:var(--palm);}
+
+.pin-gate{max-width:320px;margin:60px auto;text-align:center;}
+.pin-gate input{text-align:center;letter-spacing:.3em;font-family:'IBM Plex Mono';font-size:1.2rem;}
+
+.subnav{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;}
+.subnav button{background:#fff;border:1.5px solid var(--line);color:var(--sea-deep);font-weight:600;font-size:.8rem;padding:8px 14px;border-radius:20px;cursor:pointer;transition:all .15s ease;min-height:36px;}
+.subnav button.active{background:var(--sea);border-color:var(--sea);color:#fff;}
+
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;}
+.filter-bar label{font-size:.78rem;font-weight:600;color:var(--sea-deep);}
+.filter-bar select,.filter-bar input[type="date"]{padding:7px 10px;border:1.5px solid var(--line);border-radius:8px;font-family:'Inter';font-size:.82rem;background:#fff;color:var(--ink);}
+.filter-bar select:focus,.filter-bar input[type="date"]:focus{outline:2px solid var(--coral);outline-offset:1px;}
+
+.kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:22px;}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 14px;box-shadow:var(--shadow);transition:transform .15s ease;}
+.kpi:hover{transform:translateY(-2px);}
+.kpi .kval{font-family:'IBM Plex Mono';font-weight:600;font-size:1.55rem;color:var(--sea-deep);}
+.kpi .klbl{font-size:.7rem;color:var(--palm);text-transform:uppercase;letter-spacing:.06em;margin-top:4px;}
+.kpi .ktrend{font-size:.72rem;margin-top:6px;font-weight:600;}
+.kpi .up{color:var(--palm);}
+.kpi .down{color:var(--coral);}
+
+.panel-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:18px;box-shadow:var(--shadow);}
+.panel-card h3{font-family:'Fraunces',serif;font-size:1.1rem;margin:0 0 12px;color:var(--sea-deep);}
+.chart-wrap{position:relative;height:220px;}
+.chart-wrap.tall{height:280px;}
+
+.section-toggle{display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 2px;}
+.section-toggle h3{margin:0;}
+.section-toggle .arrow{transition:.2s;color:var(--coral);font-weight:700;}
+.qgrid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:10px;}
+@media(min-width:560px){.kpi-grid{grid-template-columns:repeat(4,1fr);} .qgrid{grid-template-columns:1fr 1fr;}}
+.qchart-box{background:var(--sand-light);border-radius:10px;padding:10px;}
+.qchart-box .qname{font-size:.76rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;}
+.qchart-box .qname .en{font-weight:400;color:var(--palm);}
+.qchart-box .chart-wrap{height:130px;}
+
+table.data-table{width:100%;border-collapse:collapse;font-size:.78rem;}
+table.data-table th{background:var(--sea);color:#fff;padding:8px 6px;text-align:left;position:sticky;top:0;font-weight:600;}
+table.data-table td{padding:7px 6px;border-bottom:1px solid var(--line);}
+table.data-table tr:nth-child(even){background:var(--sand-light);}
+.table-scroll{overflow-x:auto;max-height:420px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;}
+
+.empty-state{text-align:center;padding:40px 20px;color:var(--palm);}
+.empty-state .eicon{font-size:2rem;}
+
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--sea-deep);color:#fff;padding:11px 20px;border-radius:30px;font-size:.85rem;font-weight:600;box-shadow:var(--shadow);z-index:99;opacity:0;transition:.3s;pointer-events:none;}
+.toast.show{opacity:1;transform:translate(-50%,-4px);}
+
+.stat-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+.stat-item{background:var(--sand-light);border-radius:10px;padding:10px 14px;flex:1;min-width:120px;}
+.stat-item .sval{font-family:'IBM Plex Mono';font-weight:600;font-size:1.1rem;color:var(--sea-deep);}
+.stat-item .slbl{font-size:.68rem;color:var(--palm);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
+
+@media(max-width:480px){
+  header.top{padding:16px 14px 0;}
+  header.top .brand h1{font-size:1.1rem;}
+  header.top .brand small{font-size:.65rem;}
+  nav.tabs button{font-size:.78rem;padding:8px 4px 12px;}
+  main{padding:16px 14px 50px;}
+  .step-head h2{font-size:1.3rem;}
+  .qcard{padding:14px 12px 12px;}
+  .rate-btn{padding:8px 2px 6px;min-height:48px;}
+  .rate-btn .num{font-size:1.15rem;}
+  .rate-btn .lbl{font-size:.55rem;}
+  .choice-btn{padding:11px 8px;font-size:.82rem;}
+  .btn{padding:12px 16px;font-size:.85rem;}
+  .kpi-grid{grid-template-columns:1fr 1fr;gap:8px;}
+  .kpi{padding:12px 10px;}
+  .kpi .kval{font-size:1.2rem;}
+  .panel-card{padding:14px;}
+  .chart-wrap{height:180px;}
+  .chart-wrap.tall{height:220px;}
+  .filter-bar{flex-direction:column;align-items:stretch;}
+  .toolbar{flex-direction:column;}
+  .toolbar .btn{text-align:center;}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+<header class="top">
+  <div class="brand">
+    <div>
+      <h1>Hesperia Playa el Agua</h1>
+      <small>Encuesta de satisfacción · Departamento de Sistemas</small>
+    </div>
+  </div>
+  <nav class="tabs" id="mainTabs">
+    <button data-tab="encuesta" class="active">Encuesta</button>
+    <button data-tab="panel">Panel de gestión</button>
+  </nav>
+  <svg class="wave-under" viewBox="0 0 200 10" preserveAspectRatio="none"><path d="M0 6 Q 12.5 0 25 6 T 50 6 T 75 6 T 100 6 T 125 6 T 150 6 T 175 6 T 200 6 V10 H0 Z" fill="currentColor"/></svg>
+</header>
+
+<main id="main">
+
+  <section id="tab-encuesta">
+    <div id="wizard"></div>
+  </section>
+
+  <section id="tab-panel" style="display:none;">
+
+    <div id="pinGate" class="pin-gate">
+      <p style="color:var(--palm);font-size:.85rem;">Este panel es para uso interno del hotel.</p>
+      <div class="field"><input id="pinInput" type="password" inputmode="numeric" placeholder="PIN de acceso" maxlength="6" aria-label="PIN de acceso"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="checkPin()">Entrar</button>
+      <p id="pinError" style="color:var(--coral);font-size:.78rem;display:none;">PIN incorrecto</p>
+    </div>
+
+    <div id="panelContent" style="display:none;">
+      <div class="subnav">
+        <button data-sub="resumen" class="active">Resumen · KPI</button>
+        <button data-sub="analisis">Análisis</button>
+        <button data-sub="graficos">Gráficos por pregunta</button>
+        <button data-sub="datos">Datos</button>
+      </div>
+
+      <div id="sub-resumen"></div>
+      <div id="sub-analisis" style="display:none;"></div>
+      <div id="sub-graficos" style="display:none;"></div>
+      <div id="sub-datos" style="display:none;"></div>
+    </div>
+  </section>
+
+</main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SECTIONS = [
+  {key:'recepcion', title:'Recepción', en:'Reception', icon:'🛎️',
+    questions:[
+      {code:'VG', es:'Valoración global', en:'Global evaluation'},
+      {code:'AP', es:'Atención del personal', en:'Staff attention'},
+      {code:'Es', es:'Eficiencia del servicio', en:'Efficiency of service'},
+    ]},
+  {key:'habitacion', title:'Habitación', en:'Room', icon:'🛏️',
+    questions:[
+      {code:'VH', es:'Valoración global', en:'Global evaluation'},
+      {code:'C', es:'Confort', en:'Comfort'},
+      {code:'EC', es:'Estado de conservación', en:'State of repair'},
+      {code:'BA', es:'Baño', en:'Bathroom'},
+      {code:'LI', es:'Limpieza', en:'Cleanliness'},
+    ]},
+  {key:'desayuno', title:'Desayuno', en:'Breakfast', icon:'🥐',
+    questions:[
+      {code:'VD', es:'Valoración global', en:'Global evaluation'},
+      {code:'AT', es:'Atención del personal', en:'Staff attention'},
+      {code:'BF', es:'Variedad del buffet', en:'Variety of buffet'},
+      {code:'CP', es:'Calidad de los productos', en:'Quality of products'},
+    ]},
+  {key:'restaurante', title:'Restaurante', en:'Restaurant', icon:'🍽️',
+    questions:[
+      {code:'VR', es:'Valoración global', en:'Global evaluation'},
+      {code:'AT', es:'Atención del personal', en:'Staff attention'},
+      {code:'CC', es:'Calidad de la comida', en:'Quality of food'},
+    ]},
+  {key:'bar', title:'Bar - Cafetería', en:'Bar - Café', icon:'🍹',
+    questions:[
+      {code:'VB', es:'Valoración global', en:'Global evaluation'},
+      {code:'AT', es:'Atención del personal', en:'Staff attention'},
+      {code:'CP', es:'Calidad de los productos', en:'Quality of products'},
+    ]},
+  {key:'zonas', title:'Zonas Públicas', en:'Public areas', icon:'🏖️',
+    questions:[
+      {code:'VA', es:'Valoración global', en:'Global evaluation'},
+      {code:'LIM', es:'Limpieza', en:'Cleanliness'},
+      {code:'P', es:'Piscina', en:'Swimming pool'},
+      {code:'EC', es:'Estado de conservación', en:'State of repair'},
+    ]},
+  {key:'animacion', title:'Animación', en:'Entertainment', icon:'🎉',
+    questions:[
+      {code:'Av', es:'Valoración global', en:'Global evaluation'},
+    ]},
+];
+const RATE_LABELS = ['','Muy Bueno','Bueno','Regular','Deficiente','Muy deficiente'];
+const RATE_LABELS_EN = ['','Excellent','Good','Average','Poor','Very poor'];
+const STORAGE_KEY = 'hesperia-encuesta-respuestas';
+const SHEETS_URL_KEY = 'hesperia-sheets-webapp-url';
+const STAFF_PIN = '2026';
+
+let responses = [];
+let sheetsUrl = '';
+let current = {};
+let stepIndex = 0;
+let charts = {};
+
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2200);
+}
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function fmtDate(d){ const dt=new Date(d); return dt.toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+
+function loadResponses(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    responses = raw ? JSON.parse(raw) : [];
+  }catch(e){
+    responses = [];
+  }
+}
+function loadSheetsUrl(){
+  try{
+    sheetsUrl = localStorage.getItem(SHEETS_URL_KEY) || '';
+  }catch(e){
+    sheetsUrl = '';
+  }
+}
+function saveSheetsUrl(url){
+  try{
+    localStorage.setItem(SHEETS_URL_KEY, url);
+    sheetsUrl = url;
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+function saveResponses(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(responses));
+    return true;
+  }catch(e){
+    toast('Error al guardar la respuesta.');
+    return false;
+  }
+}
+
+function newResponse(){
+  current = {
+    id: 'r'+Date.now()+Math.random().toString(36).slice(2,7),
+    fecha: todayISO(),
+    nombre:'', apellidos:'', habitacion:'', email:'',
+    ratings:{},
+    expectativas:null, volveria:null, motivo:null, motivoOtro:'',
+    masGusto:'', menosGusto:'', sugerencias:'', comentarios:''
+  };
+  stepIndex = 0;
+}
+newResponse();
+
+const TOTAL_STEPS = 2 + SECTIONS.length;
+
+function renderWizard(){
+  const w = document.getElementById('wizard');
+  let html = `<div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" style="width:${(stepIndex/(TOTAL_STEPS))*100}%"></div></div>
+      <div class="progress-label">PASO ${Math.min(stepIndex+1,TOTAL_STEPS)} DE ${TOTAL_STEPS}</div>
+    </div>`;
+
+  if(stepIndex===0){
+    html += stepDatos();
+  } else if(stepIndex>=1 && stepIndex<=SECTIONS.length){
+    html += stepSeccion(SECTIONS[stepIndex-1]);
+  } else if(stepIndex===SECTIONS.length+1){
+    html += stepFinal();
+  } else {
+    html += stepThanks();
+  }
+  w.innerHTML = html;
+  attachStepEvents();
+}
+
+function stepDatos(){
+  return `
+  <div class="step active">
+    <div class="step-head">
+      <div class="eyebrow">Bienvenida · Welcome</div>
+      <h2>Antes de comenzar</h2>
+      <p>Sus datos son opcionales, excepto el número de habitación.</p>
+    </div>
+    <div class="field"><label for="f_nombre">Nombre</label><input id="f_nombre" value="${escapeHtml(current.nombre)}" placeholder="Su nombre" autocomplete="given-name"></div>
+    <div class="field"><label for="f_apellidos">Apellidos <span style="font-weight:400;color:var(--palm)">(opcional)</span></label><input id="f_apellidos" value="${escapeHtml(current.apellidos)}" placeholder="Sus apellidos" autocomplete="family-name"></div>
+    <div class="field" id="field_hab"><label for="f_hab">Nº de habitación</label><input id="f_hab" value="${escapeHtml(current.habitacion)}" placeholder="Ej. 5117" inputmode="numeric" autocomplete="off"><div class="error-msg">Por favor indique el número de habitación</div></div>
+    <div class="field"><label for="f_email">Email <span style="font-weight:400;color:var(--palm)">(opcional)</span></label><input id="f_email" type="email" value="${escapeHtml(current.email)}" placeholder="correo@ejemplo.com" autocomplete="email"></div>
+    <div class="nav-buttons">
+      <button class="btn btn-primary" onclick="goNext()" aria-label="Comenzar encuesta">Comenzar</button>
+    </div>
+  </div>`;
+}
+
+function stepSeccion(sec){
+  let qhtml = sec.questions.map(q=>{
+    const fkey = sec.key+'_'+q.code;
+    const val = current.ratings[fkey] || 0;
+    let btns = '';
+    for(let i=1;i<=5;i++){
+      btns += `<button type="button" class="rate-btn ${val===i?'selected sel-'+i:''}" data-fkey="${fkey}" data-val="${i}" aria-label="${RATE_LABELS[i]}" role="radio" aria-checked="${val===i?'true':'false'}">
+        <span class="num">${i}</span><span class="lbl">${RATE_LABELS[i]}</span>
+      </button>`;
+    }
+    return `<div class="qcard">
+      <div class="qtitle">${q.es} <span class="en">/ ${q.en}</span></div>
+      <div class="rate-row" role="radiogroup" aria-label="Calificación para ${q.es}">${btns}</div>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="step active">
+    <div class="step-head">
+      <div class="eyebrow">${sec.icon} ${sec.title.toUpperCase()} · ${sec.en.toUpperCase()}</div>
+      <h2>¿Cómo valora ${sec.title.toLowerCase()}?</h2>
+      <p>1 = Muy Bueno &nbsp;·&nbsp; 5 = Muy deficiente</p>
+    </div>
+    ${qhtml}
+    <div class="nav-buttons">
+      <button class="btn btn-ghost" onclick="goBack()" aria-label="Volver al paso anterior">Atrás</button>
+      <button class="btn btn-primary" onclick="goNext()" aria-label="Continuar al siguiente paso">Continuar</button>
+    </div>
+  </div>`;
+}
+
+function stepFinal(){
+  function choiceRow(name, options, current_val){
+    return `<div class="choice-row" role="radiogroup" aria-label="${name}">` + options.map(o=>
+      `<button type="button" class="choice-btn ${current_val===o.val?'selected':''}" data-field="${name}" data-val="${o.val}" role="radio" aria-checked="${current_val===o.val?'true':'false'}">${o.label}</button>`
+    ).join('') + `</div>`;
+  }
+  return `
+  <div class="step active">
+    <div class="step-head">
+      <div class="eyebrow">ÚLTIMO PASO · FINAL STEP</div>
+      <h2>Sus comentarios</h2>
+    </div>
+
+    <div class="field"><label>¿Hemos cubierto sus expectativas? / Have we fulfilled your expectations?</label>
+      ${choiceRow('expectativas',[{val:1,label:'Sí / Yes'},{val:2,label:'No'}], current.expectativas)}
+    </div>
+    <div class="field"><label>¿Volvería al hotel? / Would you come back?</label>
+      ${choiceRow('volveria',[{val:1,label:'Sí / Yes'},{val:2,label:'No'}], current.volveria)}
+    </div>
+    <div class="field"><label>Motivo del viaje / Reason for trip</label>
+      ${choiceRow('motivo',[{val:1,label:'Ocio'},{val:2,label:'Trabajo'},{val:3,label:'Otros'}], current.motivo)}
+    </div>
+    ${current.motivo===3?`<div class="field"><label for="f_motivoOtro">Especificar</label><input id="f_motivoOtro" value="${escapeHtml(current.motivoOtro)}"></div>`:''}
+
+    <div class="field"><label for="f_masGusto">¿Qué es lo que más le ha gustado del hotel?</label><textarea id="f_masGusto">${escapeHtml(current.masGusto)}</textarea></div>
+    <div class="field"><label for="f_menosGusto">¿Qué es lo que menos le ha gustado?</label><textarea id="f_menosGusto">${escapeHtml(current.menosGusto)}</textarea></div>
+    <div class="field"><label for="f_sugerencias">¿Alguna sugerencia para mejorar nuestro servicio?</label><textarea id="f_sugerencias">${escapeHtml(current.sugerencias)}</textarea></div>
+    <div class="field"><label for="f_comentarios">Comentarios adicionales</label><textarea id="f_comentarios">${escapeHtml(current.comentarios)}</textarea></div>
+
+    <div class="nav-buttons">
+      <button class="btn btn-ghost" onclick="goBack()" aria-label="Volver al paso anterior">Atrás</button>
+      <button class="btn btn-primary" onclick="submitSurvey()" aria-label="Enviar encuesta">Enviar encuesta</button>
+    </div>
+  </div>`;
+}
+
+function stepThanks(){
+  return `<div class="step active thanks">
+    <div class="wavefig">🌊</div>
+    <h2>¡Gracias por su colaboración!</h2>
+    <p>Thanks for your collaboration! Su opinión nos ayuda a mejorar.</p>
+    <button class="btn btn-primary" style="max-width:220px;margin:20px auto 0;" onclick="newResponse();renderWizard();">Nueva encuesta</button>
+  </div>`;
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function attachStepEvents(){
+  document.querySelectorAll('.rate-btn').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      current.ratings[b.dataset.fkey] = parseInt(b.dataset.val);
+      renderWizard();
+    });
+  });
+  document.querySelectorAll('.choice-btn').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      current[b.dataset.field] = parseInt(b.dataset.val);
+      renderWizard();
+    });
+  });
+  const map = {f_nombre:'nombre', f_apellidos:'apellidos', f_hab:'habitacion', f_email:'email',
+    f_motivoOtro:'motivoOtro', f_masGusto:'masGusto', f_menosGusto:'menosGusto',
+    f_sugerencias:'sugerencias', f_comentarios:'comentarios'};
+  Object.keys(map).forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('input', ()=>{ current[map[id]] = el.value; });
+  });
+}
+
+function goNext(){
+  if(stepIndex===0 && !current.habitacion){
+    const field = document.getElementById('field_hab');
+    if(field) field.classList.add('error');
+    toast('Indique el número de habitación');
+    const habInput = document.getElementById('f_hab');
+    if(habInput) habInput.focus();
+    return;
+  }
+  if(stepIndex===0){
+    const field = document.getElementById('field_hab');
+    if(field) field.classList.remove('error');
+  }
+  stepIndex++;
+  renderWizard();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function goBack(){
+  stepIndex--;
+  renderWizard();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+async function submitSurvey(){
+  responses.push(JSON.parse(JSON.stringify(current)));
+  const ok = saveResponses();
+  if(ok){
+    pushResponseToSheet(current);
+    stepIndex = SECTIONS.length+2;
+    renderWizard();
+  }
+}
+
+document.getElementById('mainTabs').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-tab]');
+  if(!btn) return;
+  document.querySelectorAll('#mainTabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-encuesta').style.display = btn.dataset.tab==='encuesta' ? 'block':'none';
+  document.getElementById('tab-panel').style.display = btn.dataset.tab==='panel' ? 'block':'none';
+});
+
+function checkPin(){
+  const val = document.getElementById('pinInput').value;
+  if(val===STAFF_PIN){
+    document.getElementById('pinGate').style.display='none';
+    document.getElementById('panelContent').style.display='block';
+    renderResumen();
+  } else {
+    document.getElementById('pinError').style.display='block';
+  }
+}
+
+document.addEventListener('click', (e)=>{
+  const b = e.target.closest('.subnav button[data-sub]');
+  if(!b) return;
+  document.querySelectorAll('.subnav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  ['resumen','analisis','graficos','datos'].forEach(s=>{
+    document.getElementById('sub-'+s).style.display = (s===b.dataset.sub)?'block':'none';
+  });
+  if(b.dataset.sub==='resumen') renderResumen();
+  if(b.dataset.sub==='analisis') renderAnalisis();
+  if(b.dataset.sub==='graficos') renderGraficos();
+  if(b.dataset.sub==='datos') renderDatos();
+});
+
+const GLOBAL_CODES = {recepcion:'VG', habitacion:'VH', desayuno:'VD', restaurante:'VR', bar:'VB', zonas:'VA', animacion:'Av'};
+
+function inRange(fechaStr, range){
+  const d = new Date(fechaStr);
+  const now = new Date();
+  if(range==='week'){
+    const past = new Date(now); past.setDate(now.getDate()-6);
+    return d>=stripTime(past) && d<=stripTime(now,true);
+  }
+  if(range==='month'){
+    return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
+  }
+  if(range==='custom'){
+    const from = document.getElementById('filterDateFrom');
+    const to = document.getElementById('filterDateTo');
+    if(from && to && from.value && to.value){
+      const fd = new Date(from.value);
+      const td = new Date(to.value);
+      td.setHours(23,59,59,999);
+      return d>=fd && d<=td;
+    }
+    return true;
+  }
+  return true;
+}
+function stripTime(d, end){ const x=new Date(d); x.setHours(end?23:0,end?59:0,0,0); return x; }
+
+function pctFromAvg(avg){ if(avg===null||isNaN(avg)) return null; return Math.round(((5-avg)/4)*1000)/10; }
+
+function globalSatisfaction(list){
+  let sum=0,n=0;
+  list.forEach(r=>{
+    Object.entries(GLOBAL_CODES).forEach(([sec,code])=>{
+      const v = r.ratings[sec+'_'+code];
+      if(v){ sum+=v; n++; }
+    });
+  });
+  return n? pctFromAvg(sum/n) : null;
+}
+function deptSatisfaction(list, secKey){
+  const code = GLOBAL_CODES[secKey];
+  const vals = list.map(r=>r.ratings[secKey+'_'+code]).filter(v=>v);
+  if(!vals.length) return null;
+  return pctFromAvg(vals.reduce((a,b)=>a+b,0)/vals.length);
+}
+function pct(count,total){ return total? Math.round((count/total)*1000)/10 : 0; }
+
+function median(arr){
+  if(!arr.length) return null;
+  const s = arr.slice().sort((a,b)=>a-b);
+  const mid = Math.floor(s.length/2);
+  return s.length%2 ? s[mid] : (s[mid-1]+s[mid])/2;
+}
+function stdDev(arr){
+  if(arr.length<2) return null;
+  const avg = arr.reduce((a,b)=>a+b,0)/arr.length;
+  const squareDiffs = arr.map(v=>Math.pow(v-avg,2));
+  const avgSquareDiff = squareDiffs.reduce((a,b)=>a+b,0)/(arr.length-1);
+  return Math.sqrt(avgSquareDiff);
+}
+
+let currentFilter = 'week';
+
+function destroyCharts(prefix){
+  Object.keys(charts).forEach(k=>{
+    if(!prefix || k.startsWith(prefix)){ charts[k].destroy(); delete charts[k]; }
+  });
+}
+
+function renderResumen(){
+  destroyCharts('resumen_');
+  const el = document.getElementById('sub-resumen');
+  if(responses.length===0){
+    el.innerHTML = `<div class="empty-state"><div class="eicon">🌴</div><p>Aún no hay respuestas registradas.</p></div>`;
+    return;
+  }
+
+  const filterHtml = `
+    <div class="filter-bar">
+      <label for="filterRange">Período:</label>
+      <select id="filterRange" onchange="changeFilter(this.value)">
+        <option value="week" ${currentFilter==='week'?'selected':''}>Últimos 7 días</option>
+        <option value="month" ${currentFilter==='month'?'selected':''}>Este mes</option>
+        <option value="custom" ${currentFilter==='custom'?'selected':''}>Rango personalizado</option>
+        <option value="all" ${currentFilter==='all'?'selected':''}>Todo</option>
+      </select>
+      <div id="customDateRange" style="display:${currentFilter==='custom'?'flex':'none'};gap:6px;flex-wrap:wrap;">
+        <input type="date" id="filterDateFrom" onchange="renderResumen()" aria-label="Fecha desde">
+        <span style="color:var(--palm);align-self:center;">hasta</span>
+        <input type="date" id="filterDateTo" onchange="renderResumen()" aria-label="Fecha hasta">
+      </div>
+    </div>`;
+
+  const week = responses.filter(r=>inRange(r.fecha,'week'));
+  const month = responses.filter(r=>inRange(r.fecha,'month'));
+  const filtered = responses.filter(r=>inRange(r.fecha, currentFilter));
+  const satWeek = globalSatisfaction(week);
+  const satMonth = globalSatisfaction(month);
+  const satFiltered = globalSatisfaction(filtered);
+  const expWeek = pct(week.filter(r=>r.expectativas===1).length, week.filter(r=>r.expectativas).length);
+  const volWeek = pct(week.filter(r=>r.volveria===1).length, week.filter(r=>r.volveria).length);
+
+  const deptScoresMonth = SECTIONS.map(s=>({key:s.key,title:s.title,score:deptSatisfaction(month,s.key)})).filter(d=>d.score!==null);
+  deptScoresMonth.sort((a,b)=>b.score-a.score);
+  const best = deptScoresMonth[0];
+  const worst = deptScoresMonth[deptScoresMonth.length-1];
+
+  const allRatingsFiltered = [];
+  filtered.forEach(r=>{
+    Object.values(r.ratings).forEach(v=>{ if(v) allRatingsFiltered.push(v); });
+  });
+  const med = median(allRatingsFiltered);
+  const sd = stdDev(allRatingsFiltered);
+
+  el.innerHTML = `
+    ${filterHtml}
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kval">${filtered.length}</div><div class="klbl">Respuestas${currentFilter==='week'?' (semana)':currentFilter==='month'?' (mes)':currentFilter==='all'?' (total)':''}</div></div>
+      <div class="kpi"><div class="kval">${satFiltered??'—'}%</div><div class="klbl">Satisfacción${currentFilter==='week'?' (semana)':currentFilter==='month'?' (mes)':''}</div></div>
+      <div class="kpi"><div class="kval">${expWeek}%</div><div class="klbl">Expectativas cubiertas</div></div>
+      <div class="kpi"><div class="kval">${volWeek}%</div><div class="klbl">Volvería</div></div>
+      <div class="kpi"><div class="kval" style="font-size:1rem;">${best?best.title:'—'}</div><div class="klbl">Mejor área (mes)</div></div>
+      <div class="kpi"><div class="kval" style="font-size:1rem;">${worst?worst.title:'—'}</div><div class="klbl">Área a mejorar (mes)</div></div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-item"><div class="sval">${med??'—'}</div><div class="slbl">Mediana (1-5)</div></div>
+      <div class="stat-item"><div class="sval">${sd?sd.toFixed(2):'—'}</div><div class="slbl">Desviación estándar</div></div>
+      <div class="stat-item"><div class="sval">${allRatingsFiltered.length}</div><div class="slbl">Total calificaciones</div></div>
+    </div>
+
+    <div class="panel-card">
+      <h3>Tendencia diaria — últimos 14 días</h3>
+      <div class="chart-wrap tall"><canvas id="chart_trend"></canvas></div>
+    </div>
+
+    <div class="panel-card">
+      <h3>Satisfacción por departamento — semana vs mes</h3>
+      <div class="chart-wrap tall"><canvas id="chart_dept"></canvas></div>
+    </div>
+  `;
+
+  const days = [];
+  for(let i=13;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); days.push(d.toISOString().slice(0,10)); }
+  const dayCounts = days.map(d=>responses.filter(r=>r.fecha===d).length);
+  const daySat = days.map(d=>{ const list=responses.filter(r=>r.fecha===d); return globalSatisfaction(list); });
+
+  charts.resumen_trend = new Chart(document.getElementById('chart_trend'), {
+    data:{
+      labels: days.map(d=>d.slice(5)),
+      datasets:[
+        {type:'bar', label:'Respuestas', data:dayCounts, backgroundColor:'rgba(15,76,74,0.18)', yAxisID:'y1', borderRadius:4},
+        {type:'line', label:'Satisfacción %', data:daySat, borderColor:'#E8622C', backgroundColor:'#E8622C', tension:.35, yAxisID:'y2', spanGaps:true}
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{
+        y1:{position:'left', beginAtZero:true, title:{display:true,text:'Respuestas'}},
+        y2:{position:'right', min:0, max:100, grid:{drawOnChartArea:false}, title:{display:true,text:'% Satisfacción'}}
+      },
+      plugins:{legend:{position:'bottom'}}
+    }
+  });
+
+  const labels = SECTIONS.map(s=>s.title);
+  const weekVals = SECTIONS.map(s=>deptSatisfaction(week,s.key));
+  const monthVals = SECTIONS.map(s=>deptSatisfaction(month,s.key));
+  charts.resumen_dept = new Chart(document.getElementById('chart_dept'), {
+    type:'bar',
+    data:{ labels, datasets:[
+      {label:'Semana', data:weekVals, backgroundColor:'#4C7A63', borderRadius:4},
+      {label:'Mes', data:monthVals, backgroundColor:'#0F4C4A', borderRadius:4},
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, scales:{y:{min:0,max:100,title:{display:true,text:'% Satisfacción'}}}, plugins:{legend:{position:'bottom'}} }
+  });
+}
+
+function changeFilter(val){
+  currentFilter = val;
+  renderResumen();
+}
+
+function renderAnalisis(){
+  destroyCharts('analisis_');
+  const el = document.getElementById('sub-analisis');
+  if(responses.length===0){
+    el.innerHTML = '<div class="empty-state"><div class="eicon">🔍</div><p>Aún no hay datos para analizar.</p></div>';
+    return;
+  }
+
+  var allRatings = [];
+  responses.forEach(function(r){
+    Object.entries(r.ratings).forEach(function(pair){
+      var key=pair[0], val=pair[1];
+      if(val){
+        var sec = key.split('_')[0];
+        allRatings.push({section:sec, value:val, id:r.id, fecha:r.fecha});
+      }
+    });
+  });
+
+  var sectionStats = SECTIONS.map(function(sec){
+    var vals = allRatings.filter(function(r){return r.section===sec.key;}).map(function(r){return r.value;});
+    if(!vals.length) return null;
+    var avg = vals.reduce(function(a,b){return a+b;},0)/vals.length;
+    var sorted = vals.slice().sort(function(a,b){return a-b;});
+    var med = sorted.length%2 ? sorted[Math.floor(sorted.length/2)] : (sorted[sorted.length/2-1]+sorted[sorted.length/2])/2;
+    var variance = vals.reduce(function(sum,v){return sum+Math.pow(v-avg,2);},0)/vals.length;
+    var sd = Math.sqrt(variance);
+    var dist = [1,2,3,4,5].map(function(v){return vals.filter(function(x){return x===v;}).length;});
+    var topCount = dist[0]+dist[1];
+    var bottomCount = dist[3]+dist[4];
+    var modeArr = [1,2,3,4,5];
+    var mode = modeArr[dist.indexOf(Math.max.apply(null,dist))];
+    var q1 = sorted[Math.floor(sorted.length*0.25)] || 0;
+    var q3 = sorted[Math.floor(sorted.length*0.75)] || 0;
+    var iqr = q3-q1;
+    return {
+      key:sec.key, title:sec.title, icon:sec.icon,
+      count:vals.length, avg:avg, median:med, mode:mode, stdDev:sd,
+      satisfaction:pctFromAvg(avg),
+      distribution:dist,
+      topPct:pct(topCount,vals.length),
+      bottomPct:pct(bottomCount,vals.length),
+      min:sorted[0], max:sorted[sorted.length-1],
+      q1:q1, q3:q3, iqr:iqr,
+      variance:variance
+    };
+  }).filter(Boolean);
+
+  var sectionStatsByAvg = sectionStats.slice().sort(function(a,b){return b.satisfaction-a.satisfaction;});
+
+  var allVals = allRatings.map(function(r){return r.value;});
+  var globalAvg = allVals.length ? allVals.reduce(function(a,b){return a+b;},0)/allVals.length : 0;
+  var globalSat = pctFromAvg(globalAvg);
+  var globalSorted = allVals.slice().sort(function(a,b){return a-b;});
+  var globalMedian = globalSorted.length ? (globalSorted.length%2 ? globalSorted[Math.floor(globalSorted.length/2)] : (globalSorted[globalSorted.length/2-1]+globalSorted[globalSorted.length/2])/2) : 0;
+
+  var expectYes = responses.filter(function(r){return r.expectativas===1;}).length;
+  var expectTotal = responses.filter(function(r){return r.expectativas;}).length;
+  var returnYes = responses.filter(function(r){return r.volveria===1;}).length;
+  var returnTotal = responses.filter(function(r){return r.volveria;}).length;
+
+  var motiveCounts = {ocio:0,trabajo:0,otros:0};
+  responses.forEach(function(r){
+    if(r.motivo===1) motiveCounts.ocio++;
+    else if(r.motivo===2) motiveCounts.trabajo++;
+    else if(r.motivo===3) motiveCounts.otros++;
+  });
+
+  var byDate = {};
+  responses.forEach(function(r){
+    if(!byDate[r.fecha]) byDate[r.fecha]=[];
+    byDate[r.fecha].push(r);
+  });
+  var dates = Object.keys(byDate).sort();
+  var dailyAvgs = dates.map(function(d){
+    var dayRatings = [];
+    byDate[d].forEach(function(r){Object.values(r.ratings).forEach(function(v){if(v)dayRatings.push(v);});});
+    return dayRatings.length ? dayRatings.reduce(function(a,b){return a+b;},0)/dayRatings.length : null;
+  }).filter(function(v){return v!==null;});
+  var trend = dailyAvgs.length>=2 ? (dailyAvgs[dailyAvgs.length-1]-dailyAvgs[0]) : 0;
+
+  var flatQ = [];
+  SECTIONS.forEach(function(s){s.questions.forEach(function(q){flatQ.push({sec:s,q:q});});});
+  var correlations = [];
+  for(var i=0;i<flatQ.length;i++){
+    for(var j=i+1;j<flatQ.length;j++){
+      if(flatQ[i].sec.key===flatQ[j].sec.key) continue;
+      var keyA = flatQ[i].sec.key+'_'+flatQ[i].q.code;
+      var keyB = flatQ[j].sec.key+'_'+flatQ[j].q.code;
+      var pairs = responses.map(function(r){return {a:r.ratings[keyA],b:r.ratings[keyB]};}).filter(function(p){return p.a&&p.b;});
+      if(pairs.length<3) continue;
+      var avgA = pairs.reduce(function(s,p){return s+p.a;},0)/pairs.length;
+      var avgB = pairs.reduce(function(s,p){return s+p.b;},0)/pairs.length;
+      var num=0,da=0,db=0;
+      pairs.forEach(function(p){
+        num+=(p.a-avgA)*(p.b-avgB);
+        da+=Math.pow(p.a-avgA,2);
+        db+=Math.pow(p.b-avgB,2);
+      });
+      var corr = (da&&db) ? num/Math.sqrt(da*db) : 0;
+      correlations.push({q1:flatQ[i], q2:flatQ[j], corr:corr, count:pairs.length});
+    }
+  }
+  correlations.sort(function(a,b){return Math.abs(b.corr)-Math.abs(a.corr);});
+  var topCorr = correlations.slice(0,8);
+
+  var byRoom = {};
+  responses.forEach(function(r){
+    if(r.habitacion){
+      if(!byRoom[r.habitacion]) byRoom[r.habitacion]=[];
+      byRoom[r.habitacion].push(r);
+    }
+  });
+  var roomList = Object.keys(byRoom).map(function(hab){
+    var roomRatings = [];
+    byRoom[hab].forEach(function(r){Object.values(r.ratings).forEach(function(v){if(v)roomRatings.push(v);});});
+    var avg = roomRatings.length ? roomRatings.reduce(function(a,b){return a+b;},0)/roomRatings.length : 0;
+    return {hab:hab, count:byRoom[hab].length, avg:avg, sat:pctFromAvg(avg)};
+  }).filter(function(r){return r.count>0;});
+  roomList.sort(function(a,b){return b.count-a.count;});
+
+  var wordFreq = {};
+  var textFields = ['masGusto','menosGusto','sugerencias','comentarios'];
+  var stopwords = ['el','la','los','las','un','una','uno','de','del','en','es','se','que','lo','al','con','por','para','su','sus','como','pero','más','muy','bien','todo','esta','este','han','hay','fue','ser','sin','sobre','también','ni','ya','e','y','a','o','no','si'];
+  responses.forEach(function(r){
+    textFields.forEach(function(f){
+      if(r[f]){
+        var words = r[f].toLowerCase().replace(/[^a-záéíóúñü\s]/g,'').split(/\s+/);
+        words.forEach(function(w){
+          w = w.replace(/^[áéíóú]/,'').trim();
+          if(w.length>3 && stopwords.indexOf(w)===-1){
+            wordFreq[w] = (wordFreq[w]||0)+1;
+          }
+        });
+      }
+    });
+  });
+  var topWords = Object.keys(wordFreq).map(function(w){return {word:w,count:wordFreq[w]};}).sort(function(a,b){return b.count-a.count;}).slice(0,15);
+
+  var dayNames = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  var byDayOfWeek = {};
+  dayNames.forEach(function(d){byDayOfWeek[d]={count:0,ratings:[]};});
+  responses.forEach(function(r){
+    var d = new Date(r.fecha);
+    var dayName = dayNames[d.getDay()];
+    byDayOfWeek[dayName].count++;
+    Object.values(r.ratings).forEach(function(v){if(v)byDayOfWeek[dayName].ratings.push(v);});
+  });
+  var dayOfWeekStats = dayNames.map(function(d){
+    var r = byDayOfWeek[d];
+    var avg = r.ratings.length ? r.ratings.reduce(function(a,b){return a+b;},0)/r.ratings.length : null;
+    return {day:d, count:r.count, avg:avg, sat:avg!==null?pctFromAvg(avg):null};
+  });
+
+  var worst = sectionStatsByAvg[sectionStatsByAvg.length-1];
+  var best = sectionStatsByAvg[0];
+  var recs = [];
+  if(worst) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Mejorar '+worst.title+'</strong> — Satisfacción '+worst.satisfaction+'% (promedio '+worst.avg.toFixed(2)+'/5). Es el área con menor puntuación. Se recomienda realizar acciones específicas de mejora en este departamento.</li>');
+  if(best) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--palm);">'+best.title+' es fortaleza</strong> — Satisfacción '+best.satisfaction+'% (promedio '+best.avg.toFixed(2)+'/5). Mantener estándares y replicar buenas prácticas en otros departamentos.</li>');
+  if(globalSat<60) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Atención general</strong> — La satisfacción global está por debajo del 60%. Se recomienda una revisión integral de todos los departamentos y procesos del hotel.</li>');
+  if(returnYes&&returnTotal && pct(returnYes,returnTotal)<70) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--gold);">Retención de clientes</strong> — Solo el '+pct(returnYes,returnTotal)+'% volvería. Implementar programa de fidelización, ofertas especiales para huéspedes recurrentes y encuestas de seguimiento post-estancia.</li>');
+  if(topCorr.length && topCorr[0].corr>0.5) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--sea);">Correlación fuerte</strong> — "'+topCorr[0].q1.q.es+'" y "'+topCorr[0].q2.q.es+'" están correlacionados (r='+topCorr[0].corr.toFixed(2)+'). Mejorar uno impacta directamente al otro.</li>');
+  if(globalAvg>3.5) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--palm);">Excelente desempeño</strong> — La satisfacción promedio ('+globalAvg.toFixed(2)+'/5) indica un alto nivel de calidad. Continuar con la estrategia actual.</li>');
+  else if(globalAvg<2.5) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Desempeño crítico</strong> — La satisfacción promedio ('+globalAvg.toFixed(2)+'/5) es alarmantemente baja. Se requiere intervención inmediata en todos los departamentos.</li>');
+  var expectPct = expectTotal?pct(expectYes,expectTotal):0;
+  if(expectPct>0 && expectPct<50) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Expectativas no cumplidas</strong> — Solo el '+expectPct+'% de huéspedes considera que sus expectativas fueron cubiertas. Revisar promesas de marketing vs realidad del servicio.</li>');
+
+  var sorted = sectionStatsByAvg.slice().sort(function(a,b){return a.satisfaction-b.satisfaction;});
+  var sortedTop3 = sectionStats.slice().sort(function(a,b){return b.topPct-a.topPct;}).slice(0,3);
+  var sortedBottom3 = sectionStats.slice().sort(function(a,b){return b.bottomPct-a.bottomPct;}).slice(0,3);
+
+  var elHtml = '';
+  elHtml += '<div class="panel-card"><h3>Análisis General</h3>';
+  elHtml += '<div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:0;">';
+  elHtml += '<div class="kpi"><div class="kval">'+responses.length+'</div><div class="klbl">Total respuestas</div></div>';
+  elHtml += '<div class="kpi"><div class="kval">'+(globalSat!==null?globalSat+'%':'—')+'</div><div class="klbl">Satisfacción global</div></div>';
+  elHtml += '<div class="kpi"><div class="kval">'+globalAvg.toFixed(2)+'</div><div class="klbl">Promedio (1-5)</div></div>';
+  elHtml += '<div class="kpi"><div class="kval">'+globalMedian.toFixed(1)+'</div><div class="klbl">Mediana global</div></div>';
+  elHtml += '<div class="kpi"><div class="kval">'+(expectTotal?pct(expectYes,expectTotal)+'%':'—')+'</div><div class="klbl">Expectativas cubiertas</div></div>';
+  elHtml += '<div class="kpi"><div class="kval">'+(returnTotal?pct(returnYes,returnTotal)+'%':'—')+'</div><div class="klbl">Volvería</div></div>';
+  elHtml += '<div class="kpi"><div class="kval">'+allVals.length+'</div><div class="klbl">Total calificaciones</div></div>';
+  elHtml += '<div class="kpi"><div class="kval">'+dates.length+'</div><div class="klbl">Días con datos</div></div>';
+  elHtml += '</div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Ranking de Departamentos</h3><div style="overflow-x:auto;">';
+  elHtml += '<table class="data-table"><thead><tr><th>#</th><th>Departamento</th><th>Satisfacción</th><th>Promedio</th><th>Mediana</th><th>Moda</th><th>Desv. Est.</th><th>Varianza</th><th>Mín</th><th>Máx</th><th>IQR</th><th>Buenos (1-2)</th><th>Malos (4-5)</th></tr></thead><tbody>';
+  sectionStatsByAvg.forEach(function(s,i){
+    elHtml += '<tr>';
+    elHtml += '<td>'+(i+1)+'</td>';
+    elHtml += '<td>'+s.icon+' '+s.title+'</td>';
+    elHtml += '<td><strong style="color:'+(s.satisfaction>=70?'var(--palm)':s.satisfaction>=50?'var(--gold)':'var(--coral)')+';">'+s.satisfaction+'%</strong></td>';
+    elHtml += '<td>'+s.avg.toFixed(2)+'</td>';
+    elHtml += '<td>'+s.median.toFixed(1)+'</td>';
+    elHtml += '<td>'+s.mode+'</td>';
+    elHtml += '<td>'+s.stdDev.toFixed(2)+'</td>';
+    elHtml += '<td>'+s.variance.toFixed(2)+'</td>';
+    elHtml += '<td>'+s.min+'</td>';
+    elHtml += '<td>'+s.max+'</td>';
+    elHtml += '<td>'+s.iqr.toFixed(1)+'</td>';
+    elHtml += '<td style="color:var(--palm);">'+s.topPct+'%</td>';
+    elHtml += '<td style="color:var(--coral);">'+s.bottomPct+'%</td>';
+    elHtml += '</tr>';
+  });
+  elHtml += '</tbody></table></div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Detalle por Pregunta</h3><div style="overflow-x:auto;">';
+  elHtml += '<table class="data-table"><thead><tr><th>Departamento</th><th>Pregunta</th><th>N</th><th>Promedio</th><th>Mediana</th><th>Desv.Est.</th><th>1 ★</th><th>2 ★</th><th>3 ★</th><th>4 ★</th><th>5 ★</th></tr></thead><tbody>';
+  SECTIONS.forEach(function(sec){
+    sec.questions.forEach(function(q){
+      var fkey = sec.key+'_'+q.code;
+      var vals = responses.map(function(r){return r.ratings[fkey];}).filter(function(v){return v;});
+      if(!vals.length) return;
+      var avg = vals.reduce(function(a,b){return a+b;},0)/vals.length;
+      var sorted2 = vals.slice().sort(function(a,b){return a-b;});
+      var med2 = sorted2.length%2 ? sorted2[Math.floor(sorted2.length/2)] : (sorted2[sorted2.length/2-1]+sorted2[sorted2.length/2])/2;
+      var sd2 = Math.sqrt(vals.reduce(function(s,v){return s+Math.pow(v-avg,2);},0)/vals.length);
+      var d2 = [1,2,3,4,5].map(function(v){return vals.filter(function(x){return x===v;}).length;});
+      elHtml += '<tr><td>'+sec.icon+' '+sec.title+'</td><td>'+q.es+'</td><td>'+vals.length+'</td>';
+      elHtml += '<td><strong>'+avg.toFixed(2)+'</strong></td><td>'+med2.toFixed(1)+'</td><td>'+sd2.toFixed(2)+'</td>';
+      d2.forEach(function(c){elHtml += '<td>'+c+'</td>';});
+      elHtml += '</tr>';
+    });
+  });
+  elHtml += '</tbody></table></div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Distribución por Departamento</h3><div class="chart-wrap tall"><canvas id="chart_analisis_dist"></canvas></div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Mapa de Calor — Promedio por Departamento/Pregunta</h3><div style="overflow-x:auto;">';
+  elHtml += '<table class="data-table"><thead><tr><th>Departamento</th>';
+  SECTIONS.forEach(function(s){elHtml += '<th style="text-align:center;">'+s.icon+'</th>';});
+  elHtml += '<th style="text-align:center;">PROM</th></tr></thead><tbody>';
+  SECTIONS.forEach(function(sec){
+    elHtml += '<tr><td><strong>'+sec.title+'</strong></td>';
+    var rowAvg = [];
+    SECTIONS.forEach(function(s2){
+      if(s2.key===sec.key){
+        var gcode = GLOBAL_CODES[sec.key];
+        var v = responses.map(function(r){return r.ratings[sec.key+'_'+gcode];}).filter(function(v){return v;});
+        var a = v.length ? v.reduce(function(x,y){return x+y;},0)/v.length : null;
+        rowAvg.push(a);
+        var bg = a===null?'transparent':a<=2?'#4C7A63':a<=3?'#D9A441':'#E8622C';
+        var tc = a===null?'var(--ink)':a<=2?'#fff':a<=3?'var(--ink)':'#fff';
+        elHtml += '<td style="text-align:center;background:'+bg+';color:'+tc+';font-weight:600;">'+(a!==null?a.toFixed(1):'—')+'</td>';
+      } else {
+        elHtml += '<td style="text-align:center;background:var(--sand-light);">—</td>';
+      }
+    });
+    var rowVals = rowAvg.filter(function(v){return v!==null;});
+    var rowProm = rowVals.length ? rowVals.reduce(function(a,b){return a+b;},0)/rowVals.length : 0;
+    var rbg = rowProm===0?'transparent':rowProm<=2?'#4C7A63':rowProm<=3?'#D9A441':'#E8622C';
+    var rtc = rowProm===0?'var(--ink)':rowProm<=2?'#fff':rowProm<=3?'var(--ink)':'#fff';
+    elHtml += '<td style="text-align:center;background:'+rbg+';color:'+rtc+';font-weight:700;">'+(rowProm?rowProm.toFixed(1):'—')+'</td>';
+    elHtml += '</tr>';
+  });
+  elHtml += '</tbody></table></div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Tendencia de Satisfacción</h3>';
+  elHtml += '<div style="font-size:.82rem;color:var(--palm);margin-bottom:10px;">Tendencia últimos días: <strong style="color:'+(trend>=0?'var(--palm)':'var(--coral)')+';">'+(trend>=0?'+':'')+(trend/0.04).toFixed(1)+'%</strong></div>';
+  elHtml += '<div class="chart-wrap tall"><canvas id="chart_analisis_trend"></canvas></div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Satisfacción por Día de la Semana</h3><div style="overflow-x:auto;">';
+  elHtml += '<table class="data-table"><thead><tr><th>Día</th><th>Respuestas</th><th>Promedio</th><th>Satisfacción</th><th>Indicador</th></tr></thead><tbody>';
+  dayOfWeekStats.forEach(function(d){
+    var indicador = d.sat!==null?(d.sat>=70?'🟢':d.sat>=50?'🟡':'🔴'):'—';
+    elHtml += '<tr><td><strong>'+d.day+'</strong></td><td>'+d.count+'</td><td>'+(d.avg!==null?d.avg.toFixed(2):'—')+'</td><td>'+(d.sat!==null?d.sat+'%':'—')+'</td><td>'+indicador+'</td></tr>';
+  });
+  elHtml += '</tbody></table></div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Motivo de Viaje</h3><div class="chart-wrap"><canvas id="chart_analisis_motive"></canvas></div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Huéspedes Más Frecuentes</h3><div style="overflow-x:auto;">';
+  elHtml += '<table class="data-table"><thead><tr><th>Habitación</th><th>Visitas</th><th>Promedio</th><th>Satisfacción</th></tr></thead><tbody>';
+  roomList.slice(0,15).forEach(function(r){
+    elHtml += '<tr><td><strong>'+r.hab+'</strong></td><td>'+r.count+'</td><td>'+r.avg.toFixed(2)+'</td><td style="color:'+(r.sat>=70?'var(--palm)':r.sat>=50?'var(--gold)':'var(--coral)')+';">'+r.sat+'%</td></tr>';
+  });
+  elHtml += '</tbody></table></div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Top Departamentos con Más Calificaciones Positivas (1-2)</h3><div style="overflow-x:auto;">';
+  elHtml += '<table class="data-table"><thead><tr><th>#</th><th>Departamento</th><th>% Positivas</th><th>Barra</th></tr></thead><tbody>';
+  sortedTop3.forEach(function(s,i){
+    var barWidth = s.topPct;
+    elHtml += '<tr><td>'+(i+1)+'</td><td>'+s.icon+' '+s.title+'</td><td><strong style="color:var(--palm);">'+s.topPct+'%</strong></td><td><div style="background:var(--line);border-radius:4px;height:14px;width:100%;position:relative;"><div style="background:var(--palm);height:100%;width:'+barWidth+'%;border-radius:4px;"></div></div></td></tr>';
+  });
+  elHtml += '</tbody></table></div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Top Departamentos con Más Calificaciones Negativas (4-5)</h3><div style="overflow-x:auto;">';
+  elHtml += '<table class="data-table"><thead><tr><th>#</th><th>Departamento</th><th>% Negativas</th><th>Barra</th></tr></thead><tbody>';
+  sortedBottom3.forEach(function(s,i){
+    var barWidth = s.bottomPct;
+    elHtml += '<tr><td>'+(i+1)+'</td><td>'+s.icon+' '+s.title+'</td><td><strong style="color:var(--coral);">'+s.bottomPct+'%</strong></td><td><div style="background:var(--line);border-radius:4px;height:14px;width:100%;position:relative;"><div style="background:var(--coral);height:100%;width:'+barWidth+'%;border-radius:4px;"></div></div></td></tr>';
+  });
+  elHtml += '</tbody></table></div></div>';
+
+  if(topWords.length){
+    elHtml += '<div class="panel-card"><h3>Palabras Más Frecuentes en Comentarios</h3><div style="overflow-x:auto;">';
+    elHtml += '<table class="data-table"><thead><tr><th>#</th><th>Palabra</th><th>Frecuencia</th><th>Barra</th></tr></thead><tbody>';
+    var maxWord = topWords[0].count;
+    topWords.forEach(function(w,i){
+      var barW = Math.round((w.count/maxWord)*100);
+      elHtml += '<tr><td>'+(i+1)+'</td><td><strong>'+w.word+'</strong></td><td>'+w.count+'</td><td><div style="background:var(--line);border-radius:4px;height:14px;width:100%;position:relative;"><div style="background:var(--sea);height:100%;width:'+barW+'%;border-radius:4px;"></div></div></td></tr>';
+    });
+    elHtml += '</tbody></table></div></div>';
+  }
+
+  if(topCorr.length){
+    elHtml += '<div class="panel-card"><h3>Correlaciones más Fuertes entre Preguntas</h3><p style="font-size:.78rem;color:var(--palm);margin:-8px 0 12px;">Coeficiente de Pearson (r): positivo = relación directa, negativo = relación inversa</p><div style="overflow-x:auto;">';
+    elHtml += '<table class="data-table"><thead><tr><th>Pregunta 1</th><th>Pregunta 2</th><th>Correlación</th><th>Fuerza</th><th>N</th></tr></thead><tbody>';
+    topCorr.forEach(function(c){
+      var absC = Math.abs(c.corr);
+      var fuerza = absC>0.7?'Muy fuerte':absC>0.5?'Fuerte':absC>0.3?'Moderada':absC>0.1?'Débil':'Muy débil';
+      var color = absC>0.5?'var(--palm)':absC>0.3?'var(--gold)':'var(--ink)';
+      elHtml += '<tr><td>'+c.q1.q.es+' ('+c.q1.sec.title+')</td><td>'+c.q2.q.es+' ('+c.q2.sec.title+')</td><td><strong style="color:'+color+';">'+c.corr.toFixed(3)+'</strong></td><td>'+fuerza+'</td><td>'+c.count+'</td></tr>';
+    });
+    elHtml += '</tbody></table></div></div>';
+  }
+
+  elHtml += '<div class="panel-card"><h3>Recomendaciones</h3><div style="font-size:.88rem;color:var(--ink);line-height:1.6;">';
+  elHtml += '<p style="margin:0 0 10px;">Basado en el análisis de <strong>'+responses.length+'</strong> respuestas ('+allVals.length+' calificaciones en '+dates.length+' días):</p>';
+  elHtml += '<ul style="margin:0;padding-left:20px;">'+recs.join('')+'</ul></div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Recomendaciones por Departamento</h3>';
+  elHtml += '<div style="font-size:.82rem;color:var(--palm);margin:-8px 0 16px;">Análisis detallado con acciones específicas de mejora para cada área del hotel.</div>';
+
+  var deptActions = {
+    recepcion: {
+      actions: [
+        {condition:'avg<=2', text:'Implementar programa de capacitación intensiva en atención al cliente para todo el personal de recepción.', priority:'Alta'},
+        {condition:'avg<=2', text:'Reducir tiempos de check-in/check-out mediante sistema digital o personal adicional en horas pico.', priority:'Alta'},
+        {condition:'avg<=3', text:'Establecer protocolo de bienvenida estandarizado con saludo personalizado al huésped.', priority:'Media'},
+        {condition:'avg<=3', text:'Implementar sistema de encuesta rápida post-check-in para detectar problemas inmediatos.', priority:'Media'},
+        {condition:'avg>3', text:'Mantener el excelente nivel de servicio. Considerar programa de reconocimiento al personal.', priority:'Baja'},
+        {condition:'stdDev>1.2', text:'Alta variabilidad en las respuestas. Capacitar al personal inconsistente y estandarizar procesos.', priority:'Alta'}
+      ],
+      tips:['Ofrecer agua o refresco de bienvenida','Personalizar la experiencia según el motivo del viaje','Proporcionar información clara sobre amenities del hotel','Tener protocolo para quejas y problemas']
+    },
+    habitacion: {
+      actions: [
+        {condition:'avg<=2', text:'Realizar inspección completa de habitaciones y priorizar mantenimiento correctivo urgente.', priority:'Alta'},
+        {condition:'avg<=2', text:'Establecer checklist de limpieza y mantenimiento diario para cada habitación.', priority:'Alta'},
+        {condition:'avg<=3', text:'Actualizar amenidades: jabones, toallas, minibar. Invertir en calidad de colchones.', priority:'Media'},
+        {condition:'avg<=3', text:'Implementar sistema de reporte de mantenimiento en tiempo real desde la habitación.', priority:'Media'},
+        {condition:'avg>3', text:'Mantener estándares actuales. Considerar upgrades graduales de mobiliario.', priority:'Baja'},
+        {condition:'stdDev>1.2', text:'Habitaciones con calidad inconsistente. Auditar individualmente cada unidad.', priority:'Alta'}
+      ],
+      tips:['Garantizar temperatura adecuada en todas las habitaciones','Asegurar señal WiFi fuerte en todas las habitaciones','Ofrecer servicio de habitaciones puntual','Mantenimiento preventivo trimestral de baños']
+    },
+    desayuno: {
+      actions: [
+        {condition:'avg<=2', text:'Revisar proveedores de alimentos y mejorar variedad del buffet inmediatamente.', priority:'Alta'},
+        {condition:'avg<=2', text:'Ampliar horario de desayuno y agregar estaciones de cocina en vivo.', priority:'Alta'},
+        {condition:'avg<=3', text:'Agregar opciones vegetarianas, veganas y sin gluten claramente identificadas.', priority:'Media'},
+        {condition:'avg<=3', text:'Mejorar presentación visual del buffet y señalización de productos.', priority:'Media'},
+        {condition:'avg>3', text:'Mantener calidad. Considerar agregar estación de jugos naturales frescos.', priority:'Baja'},
+        {condition:'stdDev>1.2', text:'Calidad inconsistente entre días. Estandarizar recetas y controles de calidad.', priority:'Alta'}
+      ],
+      tips:['Asegurar café recién hecho siempre disponible','Tener opciones calientes y frías','Renovar frutas y panes frecuentemente','Personal atento pero no invasivo']
+    },
+    restaurante: {
+      actions: [
+        {condition:'avg<=2', text:'Cambiar menú completo y contratar chef consultor para elevar calidad.', priority:'Alta'},
+        {condition:'avg<=2', text:'Revisar cadena de frío y calidad de ingredientes con proveedores.', priority:'Alta'},
+        {condition:'avg<=3', text:'Actualizar carta con platos de temporada y opciones locales.', priority:'Media'},
+        {condition:'avg<=3', text:'Mejorar presentación de platos y velocidad de servicio.', priority:'Media'},
+        {condition:'avg>3', text:'Mantener calidad gastronómica. Considerar eventos especiales temáticos.', priority:'Baja'},
+        {condition:'stdDev>1.2', text:'Servicio inconsistente. Capacitar personal de cocina y sala.', priority:'Alta'}
+      ],
+      tips:['Ofrecer platos típicos de la región','Tener carta de vinos curada','Tiempo máximo de espera: 15 minutos','Ambientación musical adecuada']
+    },
+    bar: {
+      actions: [
+        {condition:'avg<=2', text:'Renovar carta de bebidas y capacitar bartenders en cócteles premium.', priority:'Alta'},
+        {condition:'avg<=2', text:'Mejorarpresentación del área y crear ambiente más acogedor.', priority:'Alta'},
+        {condition:'avg<=3', text:'Agregar opciones de snacks y tapas para complementar bebidas.', priority:'Media'},
+        {condition:'avg<=3', text:'Establecer horarios extendidos en temporada alta.', priority:'Media'},
+        {condition:'avg>3', text:'Mantener oferta actual. Considerar noche de cócteles o eventos.', priority:'Baja'},
+        {condition:'stdDev>1.2', text:'Variedad en calidad entre horarios. Estandarizar preparaciones.', priority:'Alta'}
+      ],
+      tips:['Tener happy hour especial','Offer咖啡 de calidad premium','Música de fondo sin ser molesta','Snacks gratis de cortesía']
+    },
+    zonas: {
+      actions: [
+        {condition:'avg<=2', text:'Contratar equipo de limpieza dedicado exclusivamente a zonas comunes.', priority:'Alta'},
+        {condition:'avg<=2', text:'Invertir en mantenimiento de piscina y áreas exteriores urgentemente.', priority:'Alta'},
+        {condition:'avg<=3', text:'Aumentar frecuencia de limpieza en áreas de alto tráfico.', priority:'Media'},
+        {condition:'avg<=3', text:'Mejorar señalización y mantener áreas verdes impecables.', priority:'Media'},
+        {condition:'avg>3', text:'Mantener excelencia. Considerar mejoras estéticas graduales.', priority:'Baja'},
+        {condition:'stdDev>1.2', text:'Algunas áreas en mejor estado que otras. Inspección completa.', priority:'Alta'}
+      ],
+      tips:['Limpieza de piscina cada 4 horas','Toallas limpias siempre disponibles','Áreas de descanso con sombra','Señalización clara en todas las zonas']
+    },
+    animacion: {
+      actions: [
+        {condition:'avg<=2', text:'Contratar animador profesional y crear programación diaria variada.', priority:'Alta'},
+        {condition:'avg<=2', text:'Invertir en equipamiento de entretenimiento y actividades acuáticas.', priority:'Alta'},
+        {condition:'avg<=3', text:'Ampliar oferta de actividades: yoga, excursiones, talleres.', priority:'Media'},
+        {condition:'avg<=3', text:'Crear horario de actividades publicado en lobby y habitaciones.', priority:'Media'},
+        {condition:'avg>3', text:'Mantener programa actual. Agregar actividades nocturnas.', priority:'Baja'},
+        {condition:'stdDev>1.2', text:'Actividades muy variables. Estandarizar calidad de programación.', priority:'Alta'}
+      ],
+      tips:['Actividades para todas las edades','Programa bilingüe (español/inglés)','Eventos especiales fines de semana','Espacios para relax y diversión']
+    }
+  };
+
+  SECTIONS.forEach(function(sec){
+    var stats = sectionStatsByAvg.find(function(s){return s.key===sec.key;});
+    if(!stats) return;
+    var deptInfo = deptActions[sec.key] || {actions:[],tips:[]};
+    var applicableActions = [];
+    deptInfo.actions.forEach(function(a){
+      var evalAvg = false;
+      if(a.condition.indexOf('avg<=2')!==-1 && stats.avg<=2) evalAvg=true;
+      if(a.condition.indexOf('avg<=3')!==-1 && stats.avg>2 && stats.avg<=3) evalAvg=true;
+      if(a.condition.indexOf('avg>3')!==-1 && stats.avg>3) evalAvg=true;
+      if(a.condition.indexOf('stdDev>1.2')!==-1 && stats.stdDev>1.2) evalAvg=true;
+      if(evalAvg) applicableActions.push(a);
+    });
+    if(applicableActions.length===0 && stats.avg>3){
+      applicableActions.push({text:'Departamento con buen desempeño. Mantener estándares y reconocer al personal.', priority:'Baja'});
+    }
+
+    var satColor = stats.satisfaction>=70?'var(--palm)':stats.satisfaction>=50?'var(--gold)':'var(--coral)';
+    var statusLabel = stats.satisfaction>=70?'Excelente':stats.satisfaction>=50?'Aceptable':stats.satisfaction>=30?'Mejorable':'Crítico';
+    var statusColor = stats.satisfaction>=70?'var(--palm)':stats.satisfaction>=50?'var(--gold)':'var(--coral)';
+
+    elHtml += '<div style="background:var(--sand-light);border-radius:12px;padding:16px;margin-bottom:14px;">';
+    elHtml += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">';
+    elHtml += '<span style="font-size:1.5rem;">'+sec.icon+'</span>';
+    elHtml += '<div><h4 style="margin:0;font-family:Fraunces,serif;font-size:1.1rem;color:var(--sea-deep);">'+sec.title+' <span style="font-weight:400;color:var(--palm);font-size:.85rem;">/ '+sec.en+'</span></h4></div>';
+    elHtml += '<div style="margin-left:auto;text-align:right;">';
+    elHtml += '<div style="font-family:IBM Plex Mono;font-weight:600;font-size:1.3rem;color:'+satColor+';">'+stats.satisfaction+'%</div>';
+    elHtml += '<div style="font-size:.7rem;color:'+statusColor+';font-weight:600;">'+statusLabel+'</div>';
+    elHtml += '</div></div>';
+
+    elHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">';
+    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">'+stats.avg.toFixed(2)+'</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Promedio</div></div>';
+    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">'+stats.median.toFixed(1)+'</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Mediana</div></div>';
+    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">'+stats.stdDev.toFixed(2)+'</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Desv. Est.</div></div>';
+    elHtml += '</div>';
+
+    elHtml += '<div style="margin-bottom:10px;">';
+    elHtml += '<div style="display:flex;justify-content:space-between;font-size:.7rem;margin-bottom:3px;"><span style="color:var(--palm);">Distribución de calificaciones</span></div>';
+    elHtml += '<div style="display:flex;height:18px;border-radius:6px;overflow:hidden;">';
+    var totalDist = stats.distribution.reduce(function(a,b){return a+b;},0);
+    var distColors = ['#4C7A63','#8FAE6B','#D9A441','#E8622C','#C94E1E'];
+    var distLabels = ['1','2','3','4','5'];
+    stats.distribution.forEach(function(count, idx){
+      var w = totalDist>0?Math.round((count/totalDist)*100):0;
+      if(w>0) elHtml += '<div style="width:'+w+'%;background:'+distColors[idx]+';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:#fff;font-weight:600;" title="'+distLabels[idx]+': '+count+' ('+w+'%)">'+distLabels[idx]+'</div>';
+    });
+    elHtml += '</div></div>';
+
+    if(applicableActions.length>0){
+      elHtml += '<div style="margin-bottom:10px;"><div style="font-size:.78rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;">Acciones Recomendadas:</div>';
+      elHtml += '<ul style="margin:0;padding-left:18px;font-size:.8rem;color:var(--ink);line-height:1.5;">';
+      applicableActions.forEach(function(a){
+        var pColor = a.priority==='Alta'?'var(--coral)':a.priority==='Media'?'var(--gold)':'var(--palm)';
+        elHtml += '<li style="margin-bottom:6px;">'+a.text+' <span style="display:inline-block;font-size:.65rem;font-weight:600;color:'+pColor+';background:'+pColor+'15;padding:1px 6px;border-radius:4px;margin-left:4px;">'+a.priority+'</span></li>';
+      });
+      elHtml += '</ul></div>';
+    }
+
+    if(deptInfo.tips && deptInfo.tips.length){
+      elHtml += '<div><div style="font-size:.78rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;">Buenas Prácticas:</div>';
+      elHtml += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+      deptInfo.tips.forEach(function(tip){
+        elHtml += '<span style="font-size:.72rem;background:var(--sea);color:#fff;padding:3px 8px;border-radius:12px;">'+tip+'</span>';
+      });
+      elHtml += '</div></div>';
+    }
+
+    elHtml += '</div>';
+  });
+
+  elHtml += '</div>';
+
+  el.innerHTML = elHtml;
+
+  charts.analisis_dist = new Chart(document.getElementById('chart_analisis_dist'), {
+    type:'bar',
+    data:{
+      labels: sectionStatsByAvg.map(function(s){return s.title;}),
+      datasets:[
+        {label:'Muy Bueno (1)', data:sectionStatsByAvg.map(function(s){return s.distribution[0];}), backgroundColor:'#4C7A63', borderRadius:3},
+        {label:'Bueno (2)', data:sectionStatsByAvg.map(function(s){return s.distribution[1];}), backgroundColor:'#8FAE6B', borderRadius:3},
+        {label:'Regular (3)', data:sectionStatsByAvg.map(function(s){return s.distribution[2];}), backgroundColor:'#D9A441', borderRadius:3},
+        {label:'Deficiente (4)', data:sectionStatsByAvg.map(function(s){return s.distribution[3];}), backgroundColor:'#E8622C', borderRadius:3},
+        {label:'Muy deficiente (5)', data:sectionStatsByAvg.map(function(s){return s.distribution[4];}), backgroundColor:'#C94E1E', borderRadius:3}
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true,title:{display:true,text:'Respuestas'}}},
+      plugins:{legend:{position:'bottom'}}
+    }
+  });
+
+  var trendDays = [];
+  for(var ti=Math.min(13,dates.length-1);ti>=0;ti--){
+    trendDays.push(dates[dates.length-1-ti]);
+  }
+  var trendAvgs = trendDays.map(function(d){
+    var dayRatings = [];
+    byDate[d].forEach(function(r){Object.values(r.ratings).forEach(function(v){if(v)dayRatings.push(v);});});
+    return dayRatings.length ? dayRatings.reduce(function(a,b){return a+b;},0)/dayRatings.length : null;
+  });
+
+  charts.analisis_trend = new Chart(document.getElementById('chart_analisis_trend'), {
+    type:'line',
+    data:{
+      labels:trendDays.map(function(d){return d.slice(5);}),
+      datasets:[{
+        label:'Promedio diario',
+        data:trendAvgs,
+        borderColor:'#0F4C4A',
+        backgroundColor:'rgba(15,76,74,0.1)',
+        fill:true,
+        tension:.3,
+        spanGaps:true,
+        pointRadius:4,
+        pointBackgroundColor:'#E8622C'
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{y:{min:1,max:5,title:{display:true,text:'Promedio (1-5)'}}},
+      plugins:{legend:{position:'bottom'}}
+    }
+  });
+
+  var motiveData = [motiveCounts.ocio, motiveCounts.trabajo, motiveCounts.otros];
+  charts.analisis_motive = new Chart(document.getElementById('chart_analisis_motive'), {
+    type:'doughnut',
+    data:{
+      labels:['Ocio','Trabajo','Otros'],
+      datasets:[{
+        data:motiveData,
+        backgroundColor:['#4C7A63','#0F4C4A','#D9A441'],
+        borderWidth:2,
+        borderColor:'#fff'
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom'}}
+    }
+  });
+}
+
+function renderGraficos(){
+  destroyCharts('q_');
+  const el = document.getElementById('sub-graficos');
+  if(responses.length===0){
+    el.innerHTML = `<div class="empty-state"><div class="eicon">📊</div><p>Aún no hay datos para graficar.</p></div>`;
+    return;
+  }
+  el.innerHTML = SECTIONS.map(sec=>`
+    <div class="panel-card">
+      <div class="section-toggle" onclick="this.nextElementSibling.style.display = this.nextElementSibling.style.display==='none'?'grid':'none'; this.querySelector('.arrow').textContent = this.nextElementSibling.style.display==='none'?'▸':'▾';">
+        <h3>${sec.icon} ${sec.title}</h3><span class="arrow">▾</span>
+      </div>
+      <div class="qgrid" id="qgrid_${sec.key}">
+        ${sec.questions.map(q=>`
+          <div class="qchart-box">
+            <div class="qname">${q.es} <span class="en">/ ${q.en}</span></div>
+            <div class="chart-wrap"><canvas id="chart_${sec.key}_${q.code}"></canvas></div>
+          </div>`).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  SECTIONS.forEach(sec=>{
+    sec.questions.forEach(q=>{
+      const fkey = sec.key+'_'+q.code;
+      const counts = [1,2,3,4,5].map(v=>responses.filter(r=>r.ratings[fkey]===v).length);
+      const total = counts.reduce((a,b)=>a+b,0);
+      charts['q_'+fkey] = new Chart(document.getElementById('chart_'+fkey), {
+        type:'bar',
+        data:{ labels:['1','2','3','4','5'], datasets:[{
+          data:counts,
+          backgroundColor:['#4C7A63','#8FAE6B','#D9A441','#E8622C','#C94E1E']
+        }]},
+        options:{ responsive:true, maintainAspectRatio:false,
+          plugins:{legend:{display:false}, tooltip:{callbacks:{
+            title:(c)=>RATE_LABELS[parseInt(c[0].label)],
+            label:(c)=>`${c.raw} respuesta(s) (${total?Math.round(c.raw/total*100):0}%)`
+          }}},
+          scales:{ y:{beginAtZero:true, ticks:{precision:0}} } }
+      });
+    });
+  });
+}
+
+function renderDatos(){
+  const el = document.getElementById('sub-datos');
+  const sheetsCard = `
+    <div class="panel-card">
+      <h3>🔗 Conexión con Google Sheets</h3>
+      <p style="font-size:.78rem;color:var(--palm);margin-top:-6px;">Pega aquí la URL de tu Apps Script publicado como aplicación web.</p>
+      <div class="field"><input id="sheetsUrlInput" value="${escapeHtml(sheetsUrl)}" placeholder="https://script.google.com/macros/s/.../exec"></div>
+      <div class="toolbar" style="margin-bottom:0;">
+        <button class="btn btn-ghost btn-small" onclick="saveSheetsUrlFromInput()">Guardar URL</button>
+        <button class="btn btn-ghost btn-small" ${sheetsUrl?'':'disabled'} onclick="syncAllToSheet()">Sincronizar todas ahora</button>
+        <button class="btn btn-ghost btn-small" ${sheetsUrl?'':'disabled'} onclick="pullFromSheet()">Traer desde Sheets</button>
+      </div>
+      <p style="font-size:.72rem;color:var(--palm);margin:8px 0 0;">${sheetsUrl ? '✅ Cada nueva encuesta se envía automáticamente a tu hoja.' : 'Sin conectar: las respuestas solo se guardan dentro de esta app.'}</p>
+    </div>
+  `;
+  const toolbarHtml = `
+    ${sheetsCard}
+    <div class="toolbar">
+      <button class="btn btn-primary btn-small" onclick="exportExcel()">⬇ Exportar a Excel</button>
+      <button class="btn btn-ghost btn-small" onclick="exportJSONBackup()">⬇ Exportar respaldo (.json)</button>
+      <button class="btn btn-ghost btn-small" onclick="document.getElementById('importExcelInput').click()">⬆ Importar Excel</button>
+      <button class="btn btn-ghost btn-small" onclick="document.getElementById('importJsonInput').click()">⬆ Importar respaldo (.json)</button>
+      <button class="btn btn-ghost btn-small" onclick="clearAll()">Borrar todas las respuestas</button>
+      <input type="file" id="importExcelInput" accept=".xlsx,.xls" style="display:none" onchange="handleImportExcel(this.files[0]); this.value='';">
+      <input type="file" id="importJsonInput" accept=".json" style="display:none" onchange="handleImportJSON(this.files[0]); this.value='';">
+    </div>
+    <p style="font-size:.75rem;color:var(--palm);margin:-6px 0 16px;">Importar <strong>añade</strong> respuestas a las existentes (no reemplaza). Si quieres empezar de cero, borra todo primero.</p>
+  `;
+  if(responses.length===0){
+    el.innerHTML = toolbarHtml + `<div class="empty-state"><div class="eicon">🗂️</div><p>No hay respuestas registradas todavía.</p></div>`;
+    return;
+  }
+  const rows = responses.slice().reverse().map((r,i)=>`
+    <tr>
+      <td>${responses.length-i}</td>
+      <td>${fmtDate(r.fecha)}</td>
+      <td>${escapeHtml(r.nombre)} ${escapeHtml(r.apellidos)}</td>
+      <td>${escapeHtml(r.habitacion)}</td>
+      <td>${r.expectativas===1?'Sí':r.expectativas===2?'No':'—'}</td>
+      <td>${r.volveria===1?'Sí':r.volveria===2?'No':'—'}</td>
+      <td><button class="btn btn-small btn-ghost" onclick="deleteResponse('${r.id}')" aria-label="Eliminar respuesta">Eliminar</button></td>
+    </tr>`).join('');
+
+  el.innerHTML = `
+    ${toolbarHtml}
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>N</th><th>Fecha</th><th>Huésped</th><th>Hab.</th><th>Expectativas</th><th>Volvería</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function deleteResponse(id){
+  if(!confirm('¿Eliminar esta respuesta?')) return;
+  responses = responses.filter(r=>r.id!==id);
+  saveResponses();
+  renderDatos();
+  toast('Respuesta eliminada');
+}
+async function clearAll(){
+  if(!confirm('Esto eliminará TODAS las respuestas guardadas. ¿Continuar?')) return;
+  responses = [];
+  saveResponses();
+  renderDatos();
+  toast('Todas las respuestas fueron eliminadas');
+}
+
+function exportExcel(){
+  const wb = XLSX.utils.book_new();
+  const flatQ = [];
+  SECTIONS.forEach(s=>s.questions.forEach(q=>flatQ.push({sec:s,q})));
+  const header1 = ['N','Nombre','Apellidos','Fecha','Nº Hab','Email', ...flatQ.map(x=>x.sec.title), 'Expectativas','Volvería','Motivo viaje','Especificar','Más le gustó','Menos le gustó','Sugerencias','Comentarios'];
+  const header2 = ['','','','','','', ...flatQ.map(x=>x.q.code), '','','','','','','',''];
+  const dataRows = responses.map((r,i)=>{
+    const qvals = flatQ.map(x=> r.ratings[x.sec.key+'_'+x.q.code] || '');
+    return [i+1, r.nombre, r.apellidos, r.fecha, r.habitacion, r.email,
+      ...qvals,
+      r.expectativas===1?'Sí':r.expectativas===2?'No':'',
+      r.volveria===1?'Sí':r.volveria===2?'No':'',
+      r.motivo===1?'Ocio':r.motivo===2?'Trabajo':r.motivo===3?'Otros':'',
+      r.motivoOtro, r.masGusto, r.menosGusto, r.sugerencias, r.comentarios];
+  });
+  const wsDatos = XLSX.utils.aoa_to_sheet([header1, header2, ...dataRows]);
+  XLSX.utils.book_append_sheet(wb, wsDatos, 'Datos');
+
+  const week = responses.filter(r=>inRange(r.fecha,'week'));
+  const month = responses.filter(r=>inRange(r.fecha,'month'));
+  const kpiRows = [
+    ['Panel KPI — Hesperia Playa el Agua', '', ''],
+    ['Generado', new Date().toLocaleString('es-VE'), ''],
+    [],
+    ['Indicador','Semana','Mes'],
+    ['Respuestas', week.length, month.length],
+    ['Satisfacción global %', globalSatisfaction(week)??'', globalSatisfaction(month)??''],
+    ['% Expectativas cubiertas', pct(week.filter(r=>r.expectativas===1).length, week.filter(r=>r.expectativas).length), pct(month.filter(r=>r.expectativas===1).length, month.filter(r=>r.expectativas).length)],
+    ['% Volvería', pct(week.filter(r=>r.volveria===1).length, week.filter(r=>r.volveria).length), pct(month.filter(r=>r.volveria===1).length, month.filter(r=>r.volveria).length)],
+    [],
+    ['Satisfacción por departamento (%)','Semana','Mes'],
+    ...SECTIONS.map(s=>[s.title, deptSatisfaction(week,s.key)??'', deptSatisfaction(month,s.key)??''])
+  ];
+  const wsKpi = XLSX.utils.aoa_to_sheet(kpiRows);
+  XLSX.utils.book_append_sheet(wb, wsKpi, 'Dashboard KPI');
+
+  const qRows = [['Departamento','Pregunta','Código','Muy Bueno (1)','Bueno (2)','Regular (3)','Deficiente (4)','Muy deficiente (5)','Total']];
+  flatQ.forEach(({sec,q})=>{
+    const fkey = sec.key+'_'+q.code;
+    const counts = [1,2,3,4,5].map(v=>responses.filter(r=>r.ratings[fkey]===v).length);
+    qRows.push([sec.title, q.es, q.code, ...counts, counts.reduce((a,b)=>a+b,0)]);
+  });
+  const wsQ = XLSX.utils.aoa_to_sheet(qRows);
+  XLSX.utils.book_append_sheet(wb, wsQ, 'Gráficos-Preguntas');
+
+  XLSX.writeFile(wb, `Encuesta_Hesperia_${todayISO()}.xlsx`);
+  toast('Excel exportado');
+}
+
+function exportJSONBackup(){
+  const blob = new Blob([JSON.stringify({exportado: new Date().toISOString(), responses}, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `Respaldo_Encuesta_Hesperia_${todayISO()}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('Respaldo JSON exportado');
+}
+
+async function handleImportJSON(file){
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const incoming = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.responses) ? parsed.responses : null);
+    if(!incoming) throw new Error('formato inválido');
+    const existingIds = new Set(responses.map(r=>r.id));
+    let added = 0;
+    incoming.forEach(r=>{
+      if(!r || typeof r!=='object') return;
+      if(!r.id) r.id = 'r'+Date.now()+Math.random().toString(36).slice(2,7);
+      if(existingIds.has(r.id)) return;
+      existingIds.add(r.id);
+      responses.push(r);
+      added++;
+    });
+    saveResponses();
+    renderDatos();
+    toast(`${added} respuesta(s) importada(s) del respaldo`);
+  }catch(e){
+    toast('El archivo .json no tiene un formato válido');
+  }
+}
+
+function normalizeHeader(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
+async function handleImportExcel(file){
+  if(!file) return;
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    const sheetName = wb.SheetNames.includes('Datos') ? 'Datos' : wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
+
+    const flatQ = [];
+    SECTIONS.forEach(s=>s.questions.forEach(q=>flatQ.push({sec:s,q})));
+
+    let codeRow = -1, ratingStart = -1;
+    for(let r=0; r<Math.min(rows.length,6); r++){
+      const idx = rows[r].findIndex(c=>String(c).trim()===flatQ[0].q.code);
+      if(idx>-1){ codeRow = r; ratingStart = idx; break; }
+    }
+    if(codeRow===-1) throw new Error('no se encontró la fila de códigos (VG, AP, Es...)');
+
+    const headerRows = rows.slice(0, codeRow+1);
+    const numCols = Math.max(...rows.map(r=>r.length));
+    const headerText = [];
+    for(let c=0;c<numCols;c++){
+      headerText[c] = headerRows.map(r=>normalizeHeader(r[c])).join(' ');
+    }
+    function findCol(pred, excludeCols){
+      for(let c=0;c<numCols;c++){
+        if(excludeCols && excludeCols.has(c)) continue;
+        if(pred(headerText[c])) return c;
+      }
+      return -1;
+    }
+    const ratingCols = new Set();
+    for(let i=0;i<flatQ.length;i++) ratingCols.add(ratingStart+i);
+
+    const colNombre = findCol(h=>h.includes('nombre') && !h.includes('apellid'), ratingCols);
+    const colApellidos = findCol(h=>h.includes('apellid'), ratingCols);
+    const colFecha = findCol(h=>h.includes('fecha'), ratingCols);
+    const colHab = findCol(h=>h.includes('hab'), ratingCols);
+    const colEmail = findCol(h=>h.includes('mail'), ratingCols);
+    const colExpect = findCol(h=>h.includes('expectativ'), ratingCols);
+    const colVolver = findCol(h=>h.includes('volver'), ratingCols);
+    const colMotivo = findCol(h=>h.includes('motivo') && !h.includes('especific'), ratingCols);
+    const colEspecificar = findCol(h=>h.includes('especific'), ratingCols);
+    const colMas = findCol(h=>h.includes('gustado') && !h.includes('menos'), ratingCols);
+    const colMenos = findCol(h=>h.includes('menos'), ratingCols);
+    const colSugerencias = findCol(h=>h.includes('sugerenc'), ratingCols);
+    const colComentarios = findCol(h=>h.includes('coment'), ratingCols);
+
+    function toRating(v){ const n=parseInt(v); return (n>=1&&n<=5)? n : null; }
+    function toYesNo(v){
+      const s = normalizeHeader(v);
+      if(s==='1'||s==='si'||s==='sí') return 1;
+      if(s==='2'||s==='no') return 2;
+      return null;
+    }
+    function toMotivo(v){
+      const s = normalizeHeader(v);
+      if(s==='1'||s.includes('ocio')) return 1;
+      if(s==='2'||s.includes('trabajo')) return 2;
+      if(s==='3'||s.includes('otro')) return 3;
+      return null;
+    }
+    function dateToISO(v){
+      if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+      if(typeof v==='string' && v.trim()){
+        const d = new Date(v);
+        if(!isNaN(d)) return d.toISOString().slice(0,10);
+      }
+      return todayISO();
+    }
+
+    const existingIds = new Set(responses.map(r=>r.id));
+    let added = 0;
+    for(let r=codeRow+1; r<rows.length; r++){
+      const row = rows[r];
+      if(!row || row.every(c=>c==='' || c===undefined || c===null)) continue;
+      const ratings = {};
+      flatQ.forEach((x,i)=>{
+        const val = toRating(row[ratingStart+i]);
+        if(val) ratings[x.sec.key+'_'+x.q.code] = val;
+      });
+      const rec = {
+        id: 'imp'+Date.now()+Math.random().toString(36).slice(2,7)+'_'+r,
+        fecha: colFecha>-1 ? dateToISO(row[colFecha]) : todayISO(),
+        nombre: colNombre>-1 ? String(row[colNombre]||'') : '',
+        apellidos: colApellidos>-1 ? String(row[colApellidos]||'') : '',
+        habitacion: colHab>-1 ? String(row[colHab]||'') : '',
+        email: colEmail>-1 ? String(row[colEmail]||'') : '',
+        ratings,
+        expectativas: colExpect>-1 ? toYesNo(row[colExpect]) : null,
+        volveria: colVolver>-1 ? toYesNo(row[colVolver]) : null,
+        motivo: colMotivo>-1 ? toMotivo(row[colMotivo]) : null,
+        motivoOtro: colEspecificar>-1 ? String(row[colEspecificar]||'') : '',
+        masGusto: colMas>-1 ? String(row[colMas]||'') : '',
+        menosGusto: colMenos>-1 ? String(row[colMenos]||'') : '',
+        sugerencias: colSugerencias>-1 ? String(row[colSugerencias]||'') : '',
+        comentarios: colComentarios>-1 ? String(row[colComentarios]||'') : ''
+      };
+      if(existingIds.has(rec.id)) continue;
+      existingIds.add(rec.id);
+      responses.push(rec);
+      added++;
+    }
+    if(added===0){ toast('No se encontraron filas de datos para importar'); return; }
+    saveResponses();
+    renderDatos();
+    toast(`${added} respuesta(s) importada(s) del Excel`);
+  }catch(e){
+    toast('No se pudo leer el Excel: ' + e.message);
+  }
+}
+
+function saveSheetsUrlFromInput(){
+  const url = document.getElementById('sheetsUrlInput').value.trim();
+  const ok = saveSheetsUrl(url);
+  if(ok){ toast(url ? 'URL guardada' : 'Conexión desactivada'); renderDatos(); }
+  else toast('No se pudo guardar la URL');
+}
+
+function buildSheetPayload(r){
+  const flatQ = [];
+  SECTIONS.forEach(s=>s.questions.forEach(q=>flatQ.push({sec:s,q})));
+  return {
+    id: r.id, fecha: r.fecha, nombre: r.nombre, apellidos: r.apellidos,
+    habitacion: r.habitacion, email: r.email,
+    ratingsArray: flatQ.map(x=> r.ratings[x.sec.key+'_'+x.q.code] || ''),
+    ratings: r.ratings,
+    expectativas: r.expectativas===1?'Sí':r.expectativas===2?'No':'',
+    volveria: r.volveria===1?'Sí':r.volveria===2?'No':'',
+    motivo: r.motivo===1?'Ocio':r.motivo===2?'Trabajo':r.motivo===3?'Otros':'',
+    motivoOtro: r.motivoOtro, masGusto: r.masGusto, menosGusto: r.menosGusto,
+    sugerencias: r.sugerencias, comentarios: r.comentarios
+  };
+}
+
+async function pushResponseToSheet(r){
+  if(!sheetsUrl) return;
+  try{
+    await fetch(sheetsUrl, {method:'POST', body: JSON.stringify(buildSheetPayload(r))});
+  }catch(e){
+    console.warn('No se pudo enviar a Google Sheets', e);
+  }
+}
+
+async function syncAllToSheet(){
+  if(!sheetsUrl){ toast('Primero guarda la URL de tu Apps Script'); return; }
+  toast('Sincronizando...');
+  let ok=0;
+  for(const r of responses){
+    try{ await fetch(sheetsUrl, {method:'POST', body: JSON.stringify(buildSheetPayload(r))}); ok++; }
+    catch(e){}
+  }
+  toast(`${ok} de ${responses.length} respuesta(s) sincronizada(s)`);
+}
+
+async function pullFromSheet(){
+  if(!sheetsUrl){ toast('Primero guarda la URL de tu Apps Script'); return; }
+  try{
+    const res = await fetch(sheetsUrl);
+    const data = await res.json();
+    const existingIds = new Set(responses.map(r=>r.id));
+    let added = 0;
+    data.forEach(d=>{
+      if(!d.id || existingIds.has(d.id)) return;
+      existingIds.add(d.id);
+      responses.push({
+        id: d.id, fecha: d.fecha || todayISO(), nombre: d.nombre||'', apellidos: d.apellidos||'',
+        habitacion: d.habitacion||'', email: d.email||'', ratings: d.ratings||{},
+        expectativas: d.expectativas==='Sí'?1:d.expectativas==='No'?2:null,
+        volveria: d.volveria==='Sí'?1:d.volveria==='No'?2:null,
+        motivo: d.motivo==='Ocio'?1:d.motivo==='Trabajo'?2:d.motivo==='Otros'?3:null,
+        motivoOtro: d.motivoOtro||'', masGusto: d.masGusto||'', menosGusto: d.menosGusto||'',
+        sugerencias: d.sugerencias||'', comentarios: d.comentarios||''
+      });
+      added++;
+    });
+    saveResponses();
+    renderDatos();
+    toast(`${added} respuesta(s) traída(s) desde Sheets`);
+  }catch(e){
+    toast('No se pudo conectar con Google Sheets. Revisa la URL y los permisos.');
+  }
+}
+
+(function init(){
+  loadResponses();
+  loadSheetsUrl();
+  renderWizard();
+})();
+</script>
+</body>
+</html>
