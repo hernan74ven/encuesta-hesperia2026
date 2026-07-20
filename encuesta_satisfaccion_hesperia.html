@@ -188,7 +188,7 @@ table.data-table tr:nth-child(even){background:var(--sand-light);}
   <div class="brand">
     <div>
       <h1>Hesperia Playa el Agua</h1>
-      <small>Encuesta de satisfacción · Departamento de Sistemas</small>
+      <small>Encuesta de satisfacción</small>
     </div>
   </div>
   <nav class="tabs" id="mainTabs">
@@ -231,6 +231,15 @@ table.data-table tr:nth-child(even){background:var(--sand-light);}
 </main>
 </div>
 <div class="toast" id="toast"></div>
+<div id="loadingOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,54,52,0.5);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#fff;padding:24px 32px;border-radius:16px;box-shadow:var(--shadow);text-align:center;">
+    <div style="width:32px;height:32px;border:3px solid var(--line);border-top-color:var(--coral);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px;"></div>
+    <div style="font-size:.85rem;color:var(--sea-deep);font-weight:600;" id="loadingText">Cargando...</div>
+  </div>
+</div>
+<style>
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
 
 <script>
 const SECTIONS = [
@@ -284,6 +293,67 @@ const RATE_LABELS_EN = ['','Excellent','Good','Average','Poor','Very poor'];
 const STORAGE_KEY = 'hesperia-encuesta-respuestas';
 const SHEETS_URL_KEY = 'hesperia-sheets-webapp-url';
 const STAFF_PIN = '2026';
+const DB_NAME = 'HesperiaEncuesta';
+const DB_VERSION = 1;
+const STORE_NAME = 'respuestas';
+
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function loadAllFromDB(){
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    return await new Promise((resolve) => {
+      const result = [];
+      const cursor = store.openCursor();
+      cursor.onsuccess = (e) => {
+        const c = e.target.result;
+        if (c) { result.push(c.value); c.continue(); }
+        else resolve(result);
+      };
+      cursor.onerror = () => resolve([]);
+    });
+  } catch(e){ return []; }
+}
+
+async function saveAllToDB(responses){
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    store.clear();
+    for (const r of responses) store.put(r);
+    return new Promise((resolve) => { tx.oncomplete = () => resolve(true); tx.onerror = () => resolve(false); });
+  } catch(e){ return false; }
+}
+
+function checkStorageQuota(){
+  try {
+    let total = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      const val = localStorage.getItem(key);
+      total += (key.length + val.length) * 2;
+    }
+    const limit = 5 * 1024 * 1024;
+    const pct = (total / limit) * 100;
+    if (pct > 80) toast('Almacenamiento casi lleno (' + Math.round(pct) + '%). Exporta tus datos para no perderlos.');
+    return pct;
+  } catch(e){ return 0; }
+}
 
 let responses = [];
 let sheetsUrl = '';
@@ -296,13 +366,31 @@ function toast(msg){
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2200);
 }
+function showLoading(msg){
+  const overlay = document.getElementById('loadingOverlay');
+  document.getElementById('loadingText').textContent = msg || 'Cargando...';
+  overlay.style.display = 'flex';
+}
+function hideLoading(){
+  document.getElementById('loadingOverlay').style.display = 'none';
+}
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function fmtDate(d){ const dt=new Date(d); return dt.toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'}); }
 
-function loadResponses(){
+async function loadResponses(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
-    responses = raw ? JSON.parse(raw) : [];
+    if (raw) {
+      responses = JSON.parse(raw);
+      return;
+    }
+    const dbData = await loadAllFromDB();
+    if (dbData.length) {
+      responses = dbData;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(responses));
+    } else {
+      responses = [];
+    }
   }catch(e){
     responses = [];
   }
@@ -323,11 +411,18 @@ function saveSheetsUrl(url){
     return false;
   }
 }
-function saveResponses(){
+async function saveResponses(){
   try{
     localStorage.setItem(STORAGE_KEY, JSON.stringify(responses));
+    checkStorageQuota();
+    saveAllToDB(responses);
     return true;
   }catch(e){
+    const dbOk = await saveAllToDB(responses);
+    if (dbOk) {
+      toast('Almacenamiento local lleno. Usando respaldo en IndexedDB.');
+      return true;
+    }
     toast('Error al guardar la respuesta.');
     return false;
   }
@@ -365,7 +460,6 @@ function renderWizard(){
     html += stepThanks();
   }
   w.innerHTML = html;
-  attachStepEvents();
 }
 
 function stepDatos(){
@@ -464,25 +558,29 @@ function stepThanks(){
 
 function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function attachStepEvents(){
-  document.querySelectorAll('.rate-btn').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      current.ratings[b.dataset.fkey] = parseInt(b.dataset.val);
-      renderWizard();
-    });
-  });
-  document.querySelectorAll('.choice-btn').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      current[b.dataset.field] = parseInt(b.dataset.val);
-      renderWizard();
-    });
-  });
-  const map = {f_nombre:'nombre', f_apellidos:'apellidos', f_hab:'habitacion', f_email:'email',
+function setupWizardDelegation(){
+  const wizard = document.getElementById('wizard');
+  const inputMap = {f_nombre:'nombre', f_apellidos:'apellidos', f_hab:'habitacion', f_email:'email',
     f_motivoOtro:'motivoOtro', f_masGusto:'masGusto', f_menosGusto:'menosGusto',
     f_sugerencias:'sugerencias', f_comentarios:'comentarios'};
-  Object.keys(map).forEach(id=>{
-    const el = document.getElementById(id);
-    if(el) el.addEventListener('input', ()=>{ current[map[id]] = el.value; });
+
+  wizard.addEventListener('click', e => {
+    const rateBtn = e.target.closest('.rate-btn');
+    if(rateBtn){
+      current.ratings[rateBtn.dataset.fkey] = parseInt(rateBtn.dataset.val);
+      renderWizard();
+      return;
+    }
+    const choiceBtn = e.target.closest('.choice-btn');
+    if(choiceBtn){
+      current[choiceBtn.dataset.field] = parseInt(choiceBtn.dataset.val);
+      renderWizard();
+    }
+  });
+
+  wizard.addEventListener('input', e => {
+    const field = inputMap[e.target.id];
+    if(field) current[field] = e.target.value;
   });
 }
 
@@ -509,8 +607,9 @@ function goBack(){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 async function submitSurvey(){
+  if(!confirm('¿Enviar la encuesta? Una vez enviada no podrá editarla.')) return;
   responses.push(JSON.parse(JSON.stringify(current)));
-  const ok = saveResponses();
+  const ok = await saveResponses();
   if(ok){
     pushResponseToSheet(current);
     stepIndex = SECTIONS.length+2;
@@ -554,30 +653,42 @@ document.addEventListener('click', (e)=>{
 
 const GLOBAL_CODES = {recepcion:'VG', habitacion:'VH', desayuno:'VD', restaurante:'VR', bar:'VB', zonas:'VA', animacion:'Av'};
 
+let _filterFrom = '';
+let _filterTo = '';
+
+function getFilterDates(){
+  return { from: _filterFrom, to: _filterTo };
+}
+
+function setFilterDates(fromDate, toDate){
+  _filterFrom = fromDate || '';
+  _filterTo = toDate || '';
+}
+
 function inRange(fechaStr, range){
   const d = new Date(fechaStr);
-  const now = new Date();
-  if(range==='week'){
-    const past = new Date(now); past.setDate(now.getDate()-6);
-    return d>=stripTime(past) && d<=stripTime(now,true);
-  }
-  if(range==='month'){
-    return d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
-  }
-  if(range==='custom'){
-    const from = document.getElementById('filterDateFrom');
-    const to = document.getElementById('filterDateTo');
-    if(from && to && from.value && to.value){
-      const fd = new Date(from.value);
-      const td = new Date(to.value);
+  if(!range){
+    const { from, to } = getFilterDates();
+    if(from && to){
+      const fd = new Date(from);
+      const td = new Date(to);
       td.setHours(23,59,59,999);
-      return d>=fd && d<=td;
+      return d >= fd && d <= td;
     }
     return true;
   }
+  const now = new Date();
+  if(range === 'week'){
+    const past = new Date(now); past.setDate(now.getDate()-6);
+    return d >= stripTime(past) && d <= stripTime(now, true);
+  }
+  if(range === 'month'){
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  }
   return true;
 }
-function stripTime(d, end){ const x=new Date(d); x.setHours(end?23:0,end?59:0,0,0); return x; }
+
+function stripTime(d, end){ const x = new Date(d); x.setHours(end ? 23 : 0, end ? 59 : 0, 0, 0); return x; }
 
 function pctFromAvg(avg){ if(avg===null||isNaN(avg)) return null; return Math.round(((5-avg)/4)*1000)/10; }
 
@@ -613,8 +724,6 @@ function stdDev(arr){
   return Math.sqrt(avgSquareDiff);
 }
 
-let currentFilter = 'week';
-
 function destroyCharts(prefix){
   Object.keys(charts).forEach(k=>{
     if(!prefix || k.startsWith(prefix)){ charts[k].destroy(); delete charts[k]; }
@@ -629,25 +738,18 @@ function renderResumen(){
     return;
   }
 
+  const { from: curFrom, to: curTo } = getFilterDates();
   const filterHtml = `
     <div class="filter-bar">
-      <label for="filterRange">Período:</label>
-      <select id="filterRange" onchange="changeFilter(this.value)">
-        <option value="week" ${currentFilter==='week'?'selected':''}>Últimos 7 días</option>
-        <option value="month" ${currentFilter==='month'?'selected':''}>Este mes</option>
-        <option value="custom" ${currentFilter==='custom'?'selected':''}>Rango personalizado</option>
-        <option value="all" ${currentFilter==='all'?'selected':''}>Todo</option>
-      </select>
-      <div id="customDateRange" style="display:${currentFilter==='custom'?'flex':'none'};gap:6px;flex-wrap:wrap;">
-        <input type="date" id="filterDateFrom" onchange="renderResumen()" aria-label="Fecha desde">
-        <span style="color:var(--palm);align-self:center;">hasta</span>
-        <input type="date" id="filterDateTo" onchange="renderResumen()" aria-label="Fecha hasta">
-      </div>
+      <label style="font-size:.82rem;">Filtrar por fechas:</label>
+      <input type="date" id="filterDateFrom" onchange="setFilterDates(this.value,document.getElementById('filterDateTo').value);onDateChange()" value="${curFrom}" aria-label="Desde" style="flex:0 1 150px;min-width:0;">
+      <span style="color:var(--palm);align-self:center;">→</span>
+      <input type="date" id="filterDateTo" onchange="setFilterDates(document.getElementById('filterDateFrom').value,this.value);onDateChange()" value="${curTo}" aria-label="Hasta" style="flex:0 1 150px;min-width:0;">
     </div>`;
 
   const week = responses.filter(r=>inRange(r.fecha,'week'));
   const month = responses.filter(r=>inRange(r.fecha,'month'));
-  const filtered = responses.filter(r=>inRange(r.fecha, currentFilter));
+  const filtered = responses.filter(r=>inRange(r.fecha));
   const satWeek = globalSatisfaction(week);
   const satMonth = globalSatisfaction(month);
   const satFiltered = globalSatisfaction(filtered);
@@ -669,8 +771,8 @@ function renderResumen(){
   el.innerHTML = `
     ${filterHtml}
     <div class="kpi-grid">
-      <div class="kpi"><div class="kval">${filtered.length}</div><div class="klbl">Respuestas${currentFilter==='week'?' (semana)':currentFilter==='month'?' (mes)':currentFilter==='all'?' (total)':''}</div></div>
-      <div class="kpi"><div class="kval">${satFiltered??'—'}%</div><div class="klbl">Satisfacción${currentFilter==='week'?' (semana)':currentFilter==='month'?' (mes)':''}</div></div>
+      <div class="kpi"><div class="kval">${filtered.length}</div><div class="klbl">Respuestas (rango)</div></div>
+      <div class="kpi"><div class="kval">${satFiltered??'—'}%</div><div class="klbl">Satisfacción (rango)</div></div>
       <div class="kpi"><div class="kval">${expWeek}%</div><div class="klbl">Expectativas cubiertas</div></div>
       <div class="kpi"><div class="kval">${volWeek}%</div><div class="klbl">Volvería</div></div>
       <div class="kpi"><div class="kval" style="font-size:1rem;">${best?best.title:'—'}</div><div class="klbl">Mejor área (mes)</div></div>
@@ -684,7 +786,7 @@ function renderResumen(){
     </div>
 
     <div class="panel-card">
-      <h3>Tendencia diaria — últimos 14 días</h3>
+      <h3>Tendencia diaria</h3>
       <div class="chart-wrap tall"><canvas id="chart_trend"></canvas></div>
     </div>
 
@@ -694,10 +796,11 @@ function renderResumen(){
     </div>
   `;
 
-  const days = [];
-  for(let i=13;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); days.push(d.toISOString().slice(0,10)); }
-  const dayCounts = days.map(d=>responses.filter(r=>r.fecha===d).length);
-  const daySat = days.map(d=>{ const list=responses.filter(r=>r.fecha===d); return globalSatisfaction(list); });
+  const dayMap = {};
+  filtered.forEach(r => { if(!dayMap[r.fecha]) dayMap[r.fecha] = []; dayMap[r.fecha].push(r); });
+  const days = Object.keys(dayMap).sort();
+  const dayCounts = days.map(d => dayMap[d].length);
+  const daySat = days.map(d => globalSatisfaction(dayMap[d]));
 
   charts.resumen_trend = new Chart(document.getElementById('chart_trend'), {
     data:{
@@ -730,186 +833,192 @@ function renderResumen(){
   });
 }
 
-function changeFilter(val){
-  currentFilter = val;
+function onDateChange(){
   renderResumen();
+  let el = document.getElementById('sub-analisis');
+  if(el && el.style.display !== 'none') renderAnalisis();
+}
+
+function computeAnalisisData(responses){
+  const allRatings = [];
+  responses.forEach(r => {
+    Object.entries(r.ratings).forEach(([key, val]) => {
+      if(val) allRatings.push({section: key.split('_')[0], value: val, id: r.id, fecha: r.fecha});
+    });
+  });
+
+  const sectionStats = SECTIONS.map(sec => {
+    const vals = allRatings.filter(r => r.section === sec.key).map(r => r.value);
+    if(!vals.length) return null;
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const sorted = vals.slice().sort((a, b) => a - b);
+    const median = sorted.length % 2 ? sorted[Math.floor(sorted.length / 2)] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+    const variance = vals.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / vals.length;
+    const stdDev = Math.sqrt(variance);
+    const dist = [1, 2, 3, 4, 5].map(v => vals.filter(x => x === v).length);
+    const q1 = sorted[Math.floor(sorted.length * 0.25)] || 0;
+    const q3 = sorted[Math.floor(sorted.length * 0.75)] || 0;
+    return {
+      key: sec.key, title: sec.title, icon: sec.icon,
+      count: vals.length, avg, median, mode: [1,2,3,4,5][dist.indexOf(Math.max(...dist))], stdDev,
+      satisfaction: pctFromAvg(avg), distribution: dist,
+      topPct: pct(dist[0]+dist[1], vals.length),
+      bottomPct: pct(dist[3]+dist[4], vals.length),
+      min: sorted[0], max: sorted[sorted.length-1], q1, q3, iqr: q3 - q1, variance
+    };
+  }).filter(Boolean);
+
+  const sectionStatsByAvg = sectionStats.slice().sort((a, b) => b.satisfaction - a.satisfaction);
+  const allVals = allRatings.map(r => r.value);
+  const globalAvg = allVals.length ? allVals.reduce((a, b) => a + b, 0) / allVals.length : 0;
+  const globalSorted = allVals.slice().sort((a, b) => a - b);
+  const globalMedian = globalSorted.length ? (globalSorted.length % 2 ? globalSorted[Math.floor(globalSorted.length / 2)] : (globalSorted[globalSorted.length / 2 - 1] + globalSorted[globalSorted.length / 2]) / 2) : 0;
+
+  const byDate = {};
+  responses.forEach(r => {
+    if(!byDate[r.fecha]) byDate[r.fecha] = [];
+    byDate[r.fecha].push(r);
+  });
+  const dates = Object.keys(byDate).sort();
+  const dailyAvgs = dates.map(d => {
+    const dayRatings = [];
+    byDate[d].forEach(r => Object.values(r.ratings).forEach(v => { if(v) dayRatings.push(v); }));
+    return dayRatings.length ? dayRatings.reduce((a,b) => a+b, 0) / dayRatings.length : null;
+  }).filter(v => v !== null);
+  const trend = dailyAvgs.length >= 2 ? (dailyAvgs[dailyAvgs.length - 1] - dailyAvgs[0]) : 0;
+
+  const byRoom = {};
+  responses.forEach(r => {
+    if(r.habitacion) {
+      if(!byRoom[r.habitacion]) byRoom[r.habitacion] = [];
+      byRoom[r.habitacion].push(r);
+    }
+  });
+  const roomList = Object.keys(byRoom).map(hab => {
+    const roomRatings = [];
+    byRoom[hab].forEach(r => Object.values(r.ratings).forEach(v => { if(v) roomRatings.push(v); }));
+    const avg = roomRatings.length ? roomRatings.reduce((a,b) => a+b, 0) / roomRatings.length : 0;
+    return { hab, count: byRoom[hab].length, avg, sat: pctFromAvg(avg) };
+  }).filter(r => r.count > 0).sort((a, b) => b.count - a.count);
+
+  const dayNames = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const byDayOfWeek = {};
+  dayNames.forEach(d => { byDayOfWeek[d] = { count: 0, ratings: [] }; });
+  responses.forEach(r => {
+    const dayName = dayNames[new Date(r.fecha).getDay()];
+    byDayOfWeek[dayName].count++;
+    Object.values(r.ratings).forEach(v => { if(v) byDayOfWeek[dayName].ratings.push(v); });
+  });
+  const dayOfWeekStats = dayNames.map(d => {
+    const rd = byDayOfWeek[d];
+    const avg = rd.ratings.length ? rd.ratings.reduce((a,b) => a+b, 0) / rd.ratings.length : null;
+    return { day: d, count: rd.count, avg, sat: avg !== null ? pctFromAvg(avg) : null };
+  });
+
+  let expectYes = 0, expectTotal = 0, returnYes = 0, returnTotal = 0;
+  const motiveCounts = { ocio: 0, trabajo: 0, otros: 0 };
+  responses.forEach(r => {
+    if(r.expectativas === 1) expectYes++;
+    if(r.expectativas) expectTotal++;
+    if(r.volveria === 1) returnYes++;
+    if(r.volveria) returnTotal++;
+    if(r.motivo === 1) motiveCounts.ocio++;
+    else if(r.motivo === 2) motiveCounts.trabajo++;
+    else if(r.motivo === 3) motiveCounts.otros++;
+  });
+
+  return { sectionStats, sectionStatsByAvg, allRatings, allVals, globalAvg, globalSat: pctFromAvg(globalAvg), globalMedian, expectYes, expectTotal, returnYes, returnTotal, motiveCounts, byDate, dates, dailyAvgs, trend, byRoom, roomList, dayOfWeekStats };
+}
+
+function computeCorrelations(responses, flatQ){
+  const correlations = [];
+  for(let i = 0; i < flatQ.length; i++){
+    for(let j = i + 1; j < flatQ.length; j++){
+      if(flatQ[i].sec.key === flatQ[j].sec.key) continue;
+      const keyA = flatQ[i].sec.key + '_' + flatQ[i].q.code;
+      const keyB = flatQ[j].sec.key + '_' + flatQ[j].q.code;
+      const pairs = responses.map(r => ({a: r.ratings[keyA], b: r.ratings[keyB]})).filter(p => p.a && p.b);
+      if(pairs.length < 3) continue;
+      const avgA = pairs.reduce((s, p) => s + p.a, 0) / pairs.length;
+      const avgB = pairs.reduce((s, p) => s + p.b, 0) / pairs.length;
+      let num = 0, da = 0, db = 0;
+      pairs.forEach(p => { num += (p.a - avgA) * (p.b - avgB); da += Math.pow(p.a - avgA, 2); db += Math.pow(p.b - avgB, 2); });
+      correlations.push({ q1: flatQ[i], q2: flatQ[j], corr: (da && db) ? num / Math.sqrt(da * db) : 0, count: pairs.length });
+    }
+  }
+  correlations.sort((a, b) => Math.abs(b.corr) - Math.abs(a.corr));
+  return correlations.slice(0, 8);
+}
+
+function computeWordFreq(responses){
+  const wordFreq = {};
+  const stopwords = ['el','la','los','las','un','una','uno','de','del','en','es','se','que','lo','al','con','por','para','su','sus','como','pero','mas','muy','bien','todo','esta','este','han','hay','fue','ser','sin','sobre','tambien','ni','ya','e','y','a','o','no','si'];
+  responses.forEach(r => {
+    ['masGusto','menosGusto','sugerencias','comentarios'].forEach(f => {
+      if(r[f]) {
+        r[f].toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).forEach(w => {
+          if(w.length > 3 && stopwords.indexOf(w) === -1) wordFreq[w] = (wordFreq[w] || 0) + 1;
+        });
+      }
+    });
+  });
+  return Object.keys(wordFreq).map(w => ({ word: w, count: wordFreq[w] })).sort((a, b) => b.count - a.count).slice(0, 15);
+}
+
+function buildAnalisisFilterHtml(){
+  const { from: curFrom, to: curTo } = getFilterDates();
+  let h = '<div class="filter-bar">';
+  h += '<label style="font-size:.82rem;">Filtrar por fechas:</label>';
+  h += '<input type="date" id="filterDateFromAnalisis" onchange="setFilterDates(this.value,document.getElementById(\'filterDateToAnalisis\').value);onDateChange()" value="' + curFrom + '" aria-label="Desde" style="flex:0 1 150px;min-width:0;">';
+  h += '<span style="color:var(--palm);align-self:center;">→</span>';
+  h += '<input type="date" id="filterDateToAnalisis" onchange="setFilterDates(document.getElementById(\'filterDateFromAnalisis\').value,this.value);onDateChange()" value="' + curTo + '" aria-label="Hasta" style="flex:0 1 150px;min-width:0;">';
+  return h + '</div>';
+}
+
+function buildRecommendations(data, topCorr){
+  const { sectionStatsByAvg, sectionStats, globalAvg, globalSat, globalMedian, filteredResponses, expectTotal, expectYes, returnTotal, returnYes } = data;
+  const worst = sectionStatsByAvg[sectionStatsByAvg.length - 1];
+  const best = sectionStatsByAvg[0];
+  const r = [];
+  if(worst) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Mejorar ' + worst.title + '</strong> — Satisfaccion ' + worst.satisfaction + '% (promedio ' + worst.avg.toFixed(2) + '/5). Es el area con menor puntuacion. Se recomienda realizar acciones especificas de mejora en este departamento.</li>');
+  if(best) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--palm);">' + best.title + ' es fortaleza</strong> — Satisfaccion ' + best.satisfaction + '% (promedio ' + best.avg.toFixed(2) + '/5). Mantener estandares y replicar buenas practicas en otros departamentos.</li>');
+  if(globalSat < 60) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Atencion general</strong> — La satisfaccion global esta por debajo del 60%. Se recomienda una revision integral de todos los departamentos y procesos del hotel.</li>');
+  if(returnYes && returnTotal && pct(returnYes, returnTotal) < 70) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--gold);">Retencion de clientes</strong> — Solo el ' + pct(returnYes, returnTotal) + '% volveria. Implementar programa de fidelizacion, ofertas especiales para huespedes recurrentes y encuestas de seguimiento post-estancia.</li>');
+  if(topCorr.length && topCorr[0].corr > 0.5) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--sea);">Correlacion fuerte</strong> — "' + topCorr[0].q1.q.es + '" y "' + topCorr[0].q2.q.es + '" estan correlacionados (r=' + topCorr[0].corr.toFixed(2) + '). Mejorar uno impacta directamente al otro.</li>');
+  if(globalAvg > 3.5) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--palm);">Excelente desempeno</strong> — La satisfaccion promedio (' + globalAvg.toFixed(2) + '/5) indica un alto nivel de calidad. Continuar con la estrategia actual.</li>');
+  else if(globalAvg < 2.5) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Desempeno critico</strong> — La satisfaccion promedio (' + globalAvg.toFixed(2) + '/5) es alarmantemente baja. Se requiere intervencion inmediata en todos los departamentos.</li>');
+  const expectPct = expectTotal ? pct(expectYes, expectTotal) : 0;
+  if(expectPct > 0 && expectPct < 50) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Expectativas no cumplidas</strong> — Solo el ' + expectPct + '% de huespedes considera que sus expectativas fueron cubiertas. Revisar promesas de marketing vs realidad del servicio.</li>');
+  return r;
 }
 
 function renderAnalisis(){
   destroyCharts('analisis_');
   const el = document.getElementById('sub-analisis');
-  if(responses.length===0){
-    el.innerHTML = '<div class="empty-state"><div class="eicon">🔍</div><p>Aún no hay datos para analizar.</p></div>';
+  if(responses.length === 0){
+    el.innerHTML = '<div class="empty-state"><div class="eicon">🔍</div><p>Aun no hay datos para analizar.</p></div>';
     return;
   }
 
-  var allRatings = [];
-  responses.forEach(function(r){
-    Object.entries(r.ratings).forEach(function(pair){
-      var key=pair[0], val=pair[1];
-      if(val){
-        var sec = key.split('_')[0];
-        allRatings.push({section:sec, value:val, id:r.id, fecha:r.fecha});
-      }
-    });
-  });
+  const filterHtml = buildAnalisisFilterHtml();
+  const filteredResponses = responses.filter(r => inRange(r.fecha));
+  const data = computeAnalisisData(filteredResponses);
+  const { sectionStats, sectionStatsByAvg, allRatings, allVals, globalAvg, globalSat, globalMedian, expectYes, expectTotal, returnYes, returnTotal, motiveCounts, byDate, dates, dailyAvgs, trend, byRoom, roomList, dayOfWeekStats } = data;
 
-  var sectionStats = SECTIONS.map(function(sec){
-    var vals = allRatings.filter(function(r){return r.section===sec.key;}).map(function(r){return r.value;});
-    if(!vals.length) return null;
-    var avg = vals.reduce(function(a,b){return a+b;},0)/vals.length;
-    var sorted = vals.slice().sort(function(a,b){return a-b;});
-    var med = sorted.length%2 ? sorted[Math.floor(sorted.length/2)] : (sorted[sorted.length/2-1]+sorted[sorted.length/2])/2;
-    var variance = vals.reduce(function(sum,v){return sum+Math.pow(v-avg,2);},0)/vals.length;
-    var sd = Math.sqrt(variance);
-    var dist = [1,2,3,4,5].map(function(v){return vals.filter(function(x){return x===v;}).length;});
-    var topCount = dist[0]+dist[1];
-    var bottomCount = dist[3]+dist[4];
-    var modeArr = [1,2,3,4,5];
-    var mode = modeArr[dist.indexOf(Math.max.apply(null,dist))];
-    var q1 = sorted[Math.floor(sorted.length*0.25)] || 0;
-    var q3 = sorted[Math.floor(sorted.length*0.75)] || 0;
-    var iqr = q3-q1;
-    return {
-      key:sec.key, title:sec.title, icon:sec.icon,
-      count:vals.length, avg:avg, median:med, mode:mode, stdDev:sd,
-      satisfaction:pctFromAvg(avg),
-      distribution:dist,
-      topPct:pct(topCount,vals.length),
-      bottomPct:pct(bottomCount,vals.length),
-      min:sorted[0], max:sorted[sorted.length-1],
-      q1:q1, q3:q3, iqr:iqr,
-      variance:variance
-    };
-  }).filter(Boolean);
+  const flatQ = [];
+  SECTIONS.forEach(s => s.questions.forEach(q => flatQ.push({ sec: s, q })));
+  const topCorr = computeCorrelations(filteredResponses, flatQ);
+  const topWords = computeWordFreq(filteredResponses);
+  const recs = buildRecommendations({ ...data, filteredResponses }, topCorr);
 
-  var sectionStatsByAvg = sectionStats.slice().sort(function(a,b){return b.satisfaction-a.satisfaction;});
+  const sortedTop3 = sectionStats.slice().sort((a, b) => b.topPct - a.topPct).slice(0, 3);
+  const sortedBottom3 = sectionStats.slice().sort((a, b) => b.bottomPct - a.bottomPct).slice(0, 3);
 
-  var allVals = allRatings.map(function(r){return r.value;});
-  var globalAvg = allVals.length ? allVals.reduce(function(a,b){return a+b;},0)/allVals.length : 0;
-  var globalSat = pctFromAvg(globalAvg);
-  var globalSorted = allVals.slice().sort(function(a,b){return a-b;});
-  var globalMedian = globalSorted.length ? (globalSorted.length%2 ? globalSorted[Math.floor(globalSorted.length/2)] : (globalSorted[globalSorted.length/2-1]+globalSorted[globalSorted.length/2])/2) : 0;
-
-  var expectYes = responses.filter(function(r){return r.expectativas===1;}).length;
-  var expectTotal = responses.filter(function(r){return r.expectativas;}).length;
-  var returnYes = responses.filter(function(r){return r.volveria===1;}).length;
-  var returnTotal = responses.filter(function(r){return r.volveria;}).length;
-
-  var motiveCounts = {ocio:0,trabajo:0,otros:0};
-  responses.forEach(function(r){
-    if(r.motivo===1) motiveCounts.ocio++;
-    else if(r.motivo===2) motiveCounts.trabajo++;
-    else if(r.motivo===3) motiveCounts.otros++;
-  });
-
-  var byDate = {};
-  responses.forEach(function(r){
-    if(!byDate[r.fecha]) byDate[r.fecha]=[];
-    byDate[r.fecha].push(r);
-  });
-  var dates = Object.keys(byDate).sort();
-  var dailyAvgs = dates.map(function(d){
-    var dayRatings = [];
-    byDate[d].forEach(function(r){Object.values(r.ratings).forEach(function(v){if(v)dayRatings.push(v);});});
-    return dayRatings.length ? dayRatings.reduce(function(a,b){return a+b;},0)/dayRatings.length : null;
-  }).filter(function(v){return v!==null;});
-  var trend = dailyAvgs.length>=2 ? (dailyAvgs[dailyAvgs.length-1]-dailyAvgs[0]) : 0;
-
-  var flatQ = [];
-  SECTIONS.forEach(function(s){s.questions.forEach(function(q){flatQ.push({sec:s,q:q});});});
-  var correlations = [];
-  for(var i=0;i<flatQ.length;i++){
-    for(var j=i+1;j<flatQ.length;j++){
-      if(flatQ[i].sec.key===flatQ[j].sec.key) continue;
-      var keyA = flatQ[i].sec.key+'_'+flatQ[i].q.code;
-      var keyB = flatQ[j].sec.key+'_'+flatQ[j].q.code;
-      var pairs = responses.map(function(r){return {a:r.ratings[keyA],b:r.ratings[keyB]};}).filter(function(p){return p.a&&p.b;});
-      if(pairs.length<3) continue;
-      var avgA = pairs.reduce(function(s,p){return s+p.a;},0)/pairs.length;
-      var avgB = pairs.reduce(function(s,p){return s+p.b;},0)/pairs.length;
-      var num=0,da=0,db=0;
-      pairs.forEach(function(p){
-        num+=(p.a-avgA)*(p.b-avgB);
-        da+=Math.pow(p.a-avgA,2);
-        db+=Math.pow(p.b-avgB,2);
-      });
-      var corr = (da&&db) ? num/Math.sqrt(da*db) : 0;
-      correlations.push({q1:flatQ[i], q2:flatQ[j], corr:corr, count:pairs.length});
-    }
-  }
-  correlations.sort(function(a,b){return Math.abs(b.corr)-Math.abs(a.corr);});
-  var topCorr = correlations.slice(0,8);
-
-  var byRoom = {};
-  responses.forEach(function(r){
-    if(r.habitacion){
-      if(!byRoom[r.habitacion]) byRoom[r.habitacion]=[];
-      byRoom[r.habitacion].push(r);
-    }
-  });
-  var roomList = Object.keys(byRoom).map(function(hab){
-    var roomRatings = [];
-    byRoom[hab].forEach(function(r){Object.values(r.ratings).forEach(function(v){if(v)roomRatings.push(v);});});
-    var avg = roomRatings.length ? roomRatings.reduce(function(a,b){return a+b;},0)/roomRatings.length : 0;
-    return {hab:hab, count:byRoom[hab].length, avg:avg, sat:pctFromAvg(avg)};
-  }).filter(function(r){return r.count>0;});
-  roomList.sort(function(a,b){return b.count-a.count;});
-
-  var wordFreq = {};
-  var textFields = ['masGusto','menosGusto','sugerencias','comentarios'];
-  var stopwords = ['el','la','los','las','un','una','uno','de','del','en','es','se','que','lo','al','con','por','para','su','sus','como','pero','más','muy','bien','todo','esta','este','han','hay','fue','ser','sin','sobre','también','ni','ya','e','y','a','o','no','si'];
-  responses.forEach(function(r){
-    textFields.forEach(function(f){
-      if(r[f]){
-        var words = r[f].toLowerCase().replace(/[^a-záéíóúñü\s]/g,'').split(/\s+/);
-        words.forEach(function(w){
-          w = w.replace(/^[áéíóú]/,'').trim();
-          if(w.length>3 && stopwords.indexOf(w)===-1){
-            wordFreq[w] = (wordFreq[w]||0)+1;
-          }
-        });
-      }
-    });
-  });
-  var topWords = Object.keys(wordFreq).map(function(w){return {word:w,count:wordFreq[w]};}).sort(function(a,b){return b.count-a.count;}).slice(0,15);
-
-  var dayNames = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-  var byDayOfWeek = {};
-  dayNames.forEach(function(d){byDayOfWeek[d]={count:0,ratings:[]};});
-  responses.forEach(function(r){
-    var d = new Date(r.fecha);
-    var dayName = dayNames[d.getDay()];
-    byDayOfWeek[dayName].count++;
-    Object.values(r.ratings).forEach(function(v){if(v)byDayOfWeek[dayName].ratings.push(v);});
-  });
-  var dayOfWeekStats = dayNames.map(function(d){
-    var r = byDayOfWeek[d];
-    var avg = r.ratings.length ? r.ratings.reduce(function(a,b){return a+b;},0)/r.ratings.length : null;
-    return {day:d, count:r.count, avg:avg, sat:avg!==null?pctFromAvg(avg):null};
-  });
-
-  var worst = sectionStatsByAvg[sectionStatsByAvg.length-1];
-  var best = sectionStatsByAvg[0];
-  var recs = [];
-  if(worst) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Mejorar '+worst.title+'</strong> — Satisfacción '+worst.satisfaction+'% (promedio '+worst.avg.toFixed(2)+'/5). Es el área con menor puntuación. Se recomienda realizar acciones específicas de mejora en este departamento.</li>');
-  if(best) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--palm);">'+best.title+' es fortaleza</strong> — Satisfacción '+best.satisfaction+'% (promedio '+best.avg.toFixed(2)+'/5). Mantener estándares y replicar buenas prácticas en otros departamentos.</li>');
-  if(globalSat<60) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Atención general</strong> — La satisfacción global está por debajo del 60%. Se recomienda una revisión integral de todos los departamentos y procesos del hotel.</li>');
-  if(returnYes&&returnTotal && pct(returnYes,returnTotal)<70) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--gold);">Retención de clientes</strong> — Solo el '+pct(returnYes,returnTotal)+'% volvería. Implementar programa de fidelización, ofertas especiales para huéspedes recurrentes y encuestas de seguimiento post-estancia.</li>');
-  if(topCorr.length && topCorr[0].corr>0.5) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--sea);">Correlación fuerte</strong> — "'+topCorr[0].q1.q.es+'" y "'+topCorr[0].q2.q.es+'" están correlacionados (r='+topCorr[0].corr.toFixed(2)+'). Mejorar uno impacta directamente al otro.</li>');
-  if(globalAvg>3.5) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--palm);">Excelente desempeño</strong> — La satisfacción promedio ('+globalAvg.toFixed(2)+'/5) indica un alto nivel de calidad. Continuar con la estrategia actual.</li>');
-  else if(globalAvg<2.5) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Desempeño crítico</strong> — La satisfacción promedio ('+globalAvg.toFixed(2)+'/5) es alarmantemente baja. Se requiere intervención inmediata en todos los departamentos.</li>');
-  var expectPct = expectTotal?pct(expectYes,expectTotal):0;
-  if(expectPct>0 && expectPct<50) recs.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Expectativas no cumplidas</strong> — Solo el '+expectPct+'% de huéspedes considera que sus expectativas fueron cubiertas. Revisar promesas de marketing vs realidad del servicio.</li>');
-
-  var sorted = sectionStatsByAvg.slice().sort(function(a,b){return a.satisfaction-b.satisfaction;});
-  var sortedTop3 = sectionStats.slice().sort(function(a,b){return b.topPct-a.topPct;}).slice(0,3);
-  var sortedBottom3 = sectionStats.slice().sort(function(a,b){return b.bottomPct-a.bottomPct;}).slice(0,3);
-
-  var elHtml = '';
+  let elHtml = '';
+  elHtml += filterHtml;
   elHtml += '<div class="panel-card"><h3>Análisis General</h3>';
   elHtml += '<div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:0;">';
-  elHtml += '<div class="kpi"><div class="kval">'+responses.length+'</div><div class="klbl">Total respuestas</div></div>';
+  elHtml += '<div class="kpi"><div class="kval">'+filteredResponses.length+'</div><div class="klbl">Total respuestas</div></div>';
   elHtml += '<div class="kpi"><div class="kval">'+(globalSat!==null?globalSat+'%':'—')+'</div><div class="klbl">Satisfacción global</div></div>';
   elHtml += '<div class="kpi"><div class="kval">'+globalAvg.toFixed(2)+'</div><div class="klbl">Promedio (1-5)</div></div>';
   elHtml += '<div class="kpi"><div class="kval">'+globalMedian.toFixed(1)+'</div><div class="klbl">Mediana global</div></div>';
@@ -921,40 +1030,29 @@ function renderAnalisis(){
 
   elHtml += '<div class="panel-card"><h3>Ranking de Departamentos</h3><div style="overflow-x:auto;">';
   elHtml += '<table class="data-table"><thead><tr><th>#</th><th>Departamento</th><th>Satisfacción</th><th>Promedio</th><th>Mediana</th><th>Moda</th><th>Desv. Est.</th><th>Varianza</th><th>Mín</th><th>Máx</th><th>IQR</th><th>Buenos (1-2)</th><th>Malos (4-5)</th></tr></thead><tbody>';
-  sectionStatsByAvg.forEach(function(s,i){
-    elHtml += '<tr>';
-    elHtml += '<td>'+(i+1)+'</td>';
-    elHtml += '<td>'+s.icon+' '+s.title+'</td>';
+  sectionStatsByAvg.forEach((s,i) => {
+    elHtml += '<tr><td>'+(i+1)+'</td><td>'+s.icon+' '+s.title+'</td>';
     elHtml += '<td><strong style="color:'+(s.satisfaction>=70?'var(--palm)':s.satisfaction>=50?'var(--gold)':'var(--coral)')+';">'+s.satisfaction+'%</strong></td>';
-    elHtml += '<td>'+s.avg.toFixed(2)+'</td>';
-    elHtml += '<td>'+s.median.toFixed(1)+'</td>';
-    elHtml += '<td>'+s.mode+'</td>';
-    elHtml += '<td>'+s.stdDev.toFixed(2)+'</td>';
-    elHtml += '<td>'+s.variance.toFixed(2)+'</td>';
-    elHtml += '<td>'+s.min+'</td>';
-    elHtml += '<td>'+s.max+'</td>';
-    elHtml += '<td>'+s.iqr.toFixed(1)+'</td>';
-    elHtml += '<td style="color:var(--palm);">'+s.topPct+'%</td>';
-    elHtml += '<td style="color:var(--coral);">'+s.bottomPct+'%</td>';
-    elHtml += '</tr>';
+    elHtml += '<td>'+s.avg.toFixed(2)+'</td><td>'+s.median.toFixed(1)+'</td><td>'+s.mode+'</td><td>'+s.stdDev.toFixed(2)+'</td><td>'+s.variance.toFixed(2)+'</td>';
+    elHtml += '<td>'+s.min+'</td><td>'+s.max+'</td><td>'+s.iqr.toFixed(1)+'</td><td style="color:var(--palm);">'+s.topPct+'%</td><td style="color:var(--coral);">'+s.bottomPct+'%</td></tr>';
   });
   elHtml += '</tbody></table></div></div>';
 
   elHtml += '<div class="panel-card"><h3>Detalle por Pregunta</h3><div style="overflow-x:auto;">';
   elHtml += '<table class="data-table"><thead><tr><th>Departamento</th><th>Pregunta</th><th>N</th><th>Promedio</th><th>Mediana</th><th>Desv.Est.</th><th>1 ★</th><th>2 ★</th><th>3 ★</th><th>4 ★</th><th>5 ★</th></tr></thead><tbody>';
-  SECTIONS.forEach(function(sec){
-    sec.questions.forEach(function(q){
-      var fkey = sec.key+'_'+q.code;
-      var vals = responses.map(function(r){return r.ratings[fkey];}).filter(function(v){return v;});
+  SECTIONS.forEach(sec => {
+    sec.questions.forEach(q => {
+      const fkey = sec.key+'_'+q.code;
+      const vals = filteredResponses.map(r => r.ratings[fkey]).filter(v => v);
       if(!vals.length) return;
-      var avg = vals.reduce(function(a,b){return a+b;},0)/vals.length;
-      var sorted2 = vals.slice().sort(function(a,b){return a-b;});
-      var med2 = sorted2.length%2 ? sorted2[Math.floor(sorted2.length/2)] : (sorted2[sorted2.length/2-1]+sorted2[sorted2.length/2])/2;
-      var sd2 = Math.sqrt(vals.reduce(function(s,v){return s+Math.pow(v-avg,2);},0)/vals.length);
-      var d2 = [1,2,3,4,5].map(function(v){return vals.filter(function(x){return x===v;}).length;});
+      const avg = vals.reduce((a,b) => a+b, 0) / vals.length;
+      const sorted = vals.slice().sort((a,b) => a-b);
+      const med = sorted.length%2 ? sorted[Math.floor(sorted.length/2)] : (sorted[sorted.length/2-1]+sorted[sorted.length/2])/2;
+      const sd = Math.sqrt(vals.reduce((s,v) => s+Math.pow(v-avg,2), 0) / vals.length);
+      const dist = [1,2,3,4,5].map(v => vals.filter(x => x === v).length);
       elHtml += '<tr><td>'+sec.icon+' '+sec.title+'</td><td>'+q.es+'</td><td>'+vals.length+'</td>';
-      elHtml += '<td><strong>'+avg.toFixed(2)+'</strong></td><td>'+med2.toFixed(1)+'</td><td>'+sd2.toFixed(2)+'</td>';
-      d2.forEach(function(c){elHtml += '<td>'+c+'</td>';});
+      elHtml += '<td><strong>'+avg.toFixed(2)+'</strong></td><td>'+med.toFixed(1)+'</td><td>'+sd.toFixed(2)+'</td>';
+      dist.forEach(c => { elHtml += '<td>'+c+'</td>'; });
       elHtml += '</tr>';
     });
   });
@@ -964,30 +1062,29 @@ function renderAnalisis(){
 
   elHtml += '<div class="panel-card"><h3>Mapa de Calor — Promedio por Departamento/Pregunta</h3><div style="overflow-x:auto;">';
   elHtml += '<table class="data-table"><thead><tr><th>Departamento</th>';
-  SECTIONS.forEach(function(s){elHtml += '<th style="text-align:center;">'+s.icon+'</th>';});
+  SECTIONS.forEach(s => { elHtml += '<th style="text-align:center;">'+s.icon+'</th>'; });
   elHtml += '<th style="text-align:center;">PROM</th></tr></thead><tbody>';
-  SECTIONS.forEach(function(sec){
+  SECTIONS.forEach(sec => {
     elHtml += '<tr><td><strong>'+sec.title+'</strong></td>';
-    var rowAvg = [];
-    SECTIONS.forEach(function(s2){
-      if(s2.key===sec.key){
-        var gcode = GLOBAL_CODES[sec.key];
-        var v = responses.map(function(r){return r.ratings[sec.key+'_'+gcode];}).filter(function(v){return v;});
-        var a = v.length ? v.reduce(function(x,y){return x+y;},0)/v.length : null;
+    const rowAvg = [];
+    SECTIONS.forEach(s2 => {
+      if(s2.key === sec.key){
+        const gcode = GLOBAL_CODES[sec.key];
+        const v = filteredResponses.map(r => r.ratings[sec.key+'_'+gcode]).filter(v => v);
+        const a = v.length ? v.reduce((x,y) => x+y, 0) / v.length : null;
         rowAvg.push(a);
-        var bg = a===null?'transparent':a<=2?'#4C7A63':a<=3?'#D9A441':'#E8622C';
-        var tc = a===null?'var(--ink)':a<=2?'#fff':a<=3?'var(--ink)':'#fff';
+        const bg = a===null?'transparent':a<=2?'#4C7A63':a<=3?'#D9A441':'#E8622C';
+        const tc = a===null?'var(--ink)':a<=2?'#fff':a<=3?'var(--ink)':'#fff';
         elHtml += '<td style="text-align:center;background:'+bg+';color:'+tc+';font-weight:600;">'+(a!==null?a.toFixed(1):'—')+'</td>';
       } else {
         elHtml += '<td style="text-align:center;background:var(--sand-light);">—</td>';
       }
     });
-    var rowVals = rowAvg.filter(function(v){return v!==null;});
-    var rowProm = rowVals.length ? rowVals.reduce(function(a,b){return a+b;},0)/rowVals.length : 0;
-    var rbg = rowProm===0?'transparent':rowProm<=2?'#4C7A63':rowProm<=3?'#D9A441':'#E8622C';
-    var rtc = rowProm===0?'var(--ink)':rowProm<=2?'#fff':rowProm<=3?'var(--ink)':'#fff';
-    elHtml += '<td style="text-align:center;background:'+rbg+';color:'+rtc+';font-weight:700;">'+(rowProm?rowProm.toFixed(1):'—')+'</td>';
-    elHtml += '</tr>';
+    const rowVals = rowAvg.filter(v => v !== null);
+    const rowProm = rowVals.length ? rowVals.reduce((a,b) => a+b, 0) / rowVals.length : 0;
+    const rbg = rowProm===0?'transparent':rowProm<=2?'#4C7A63':rowProm<=3?'#D9A441':'#E8622C';
+    const rtc = rowProm===0?'var(--ink)':rowProm<=2?'#fff':rowProm<=3?'var(--ink)':'#fff';
+    elHtml += '<td style="text-align:center;background:'+rbg+';color:'+rtc+';font-weight:700;">'+(rowProm?rowProm.toFixed(1):'—')+'</td></tr>';
   });
   elHtml += '</tbody></table></div></div>';
 
@@ -997,8 +1094,8 @@ function renderAnalisis(){
 
   elHtml += '<div class="panel-card"><h3>Satisfacción por Día de la Semana</h3><div style="overflow-x:auto;">';
   elHtml += '<table class="data-table"><thead><tr><th>Día</th><th>Respuestas</th><th>Promedio</th><th>Satisfacción</th><th>Indicador</th></tr></thead><tbody>';
-  dayOfWeekStats.forEach(function(d){
-    var indicador = d.sat!==null?(d.sat>=70?'🟢':d.sat>=50?'🟡':'🔴'):'—';
+  dayOfWeekStats.forEach(d => {
+    const indicador = d.sat!==null?(d.sat>=70?'🟢':d.sat>=50?'🟡':'🔴'):'—';
     elHtml += '<tr><td><strong>'+d.day+'</strong></td><td>'+d.count+'</td><td>'+(d.avg!==null?d.avg.toFixed(2):'—')+'</td><td>'+(d.sat!==null?d.sat+'%':'—')+'</td><td>'+indicador+'</td></tr>';
   });
   elHtml += '</tbody></table></div></div>';
@@ -1007,34 +1104,34 @@ function renderAnalisis(){
 
   elHtml += '<div class="panel-card"><h3>Huéspedes Más Frecuentes</h3><div style="overflow-x:auto;">';
   elHtml += '<table class="data-table"><thead><tr><th>Habitación</th><th>Visitas</th><th>Promedio</th><th>Satisfacción</th></tr></thead><tbody>';
-  roomList.slice(0,15).forEach(function(r){
+  roomList.slice(0,15).forEach(r => {
     elHtml += '<tr><td><strong>'+r.hab+'</strong></td><td>'+r.count+'</td><td>'+r.avg.toFixed(2)+'</td><td style="color:'+(r.sat>=70?'var(--palm)':r.sat>=50?'var(--gold)':'var(--coral)')+';">'+r.sat+'%</td></tr>';
   });
   elHtml += '</tbody></table></div></div>';
 
   elHtml += '<div class="panel-card"><h3>Top Departamentos con Más Calificaciones Positivas (1-2)</h3><div style="overflow-x:auto;">';
   elHtml += '<table class="data-table"><thead><tr><th>#</th><th>Departamento</th><th>% Positivas</th><th>Barra</th></tr></thead><tbody>';
-  sortedTop3.forEach(function(s,i){
-    var barWidth = s.topPct;
-    elHtml += '<tr><td>'+(i+1)+'</td><td>'+s.icon+' '+s.title+'</td><td><strong style="color:var(--palm);">'+s.topPct+'%</strong></td><td><div style="background:var(--line);border-radius:4px;height:14px;width:100%;position:relative;"><div style="background:var(--palm);height:100%;width:'+barWidth+'%;border-radius:4px;"></div></div></td></tr>';
+  sortedTop3.forEach((s,i) => {
+    elHtml += '<tr><td>'+(i+1)+'</td><td>'+s.icon+' '+s.title+'</td><td><strong style="color:var(--palm);">'+s.topPct+'%</strong></td>';
+    elHtml += '<td><div style="background:var(--line);border-radius:4px;height:14px;width:100%;position:relative;"><div style="background:var(--palm);height:100%;width:'+s.topPct+'%;border-radius:4px;"></div></div></td></tr>';
   });
   elHtml += '</tbody></table></div></div>';
 
   elHtml += '<div class="panel-card"><h3>Top Departamentos con Más Calificaciones Negativas (4-5)</h3><div style="overflow-x:auto;">';
   elHtml += '<table class="data-table"><thead><tr><th>#</th><th>Departamento</th><th>% Negativas</th><th>Barra</th></tr></thead><tbody>';
-  sortedBottom3.forEach(function(s,i){
-    var barWidth = s.bottomPct;
-    elHtml += '<tr><td>'+(i+1)+'</td><td>'+s.icon+' '+s.title+'</td><td><strong style="color:var(--coral);">'+s.bottomPct+'%</strong></td><td><div style="background:var(--line);border-radius:4px;height:14px;width:100%;position:relative;"><div style="background:var(--coral);height:100%;width:'+barWidth+'%;border-radius:4px;"></div></div></td></tr>';
+  sortedBottom3.forEach((s,i) => {
+    elHtml += '<tr><td>'+(i+1)+'</td><td>'+s.icon+' '+s.title+'</td><td><strong style="color:var(--coral);">'+s.bottomPct+'%</strong></td>';
+    elHtml += '<td><div style="background:var(--line);border-radius:4px;height:14px;width:100%;position:relative;"><div style="background:var(--coral);height:100%;width:'+s.bottomPct+'%;border-radius:4px;"></div></div></td></tr>';
   });
   elHtml += '</tbody></table></div></div>';
 
   if(topWords.length){
     elHtml += '<div class="panel-card"><h3>Palabras Más Frecuentes en Comentarios</h3><div style="overflow-x:auto;">';
     elHtml += '<table class="data-table"><thead><tr><th>#</th><th>Palabra</th><th>Frecuencia</th><th>Barra</th></tr></thead><tbody>';
-    var maxWord = topWords[0].count;
-    topWords.forEach(function(w,i){
-      var barW = Math.round((w.count/maxWord)*100);
-      elHtml += '<tr><td>'+(i+1)+'</td><td><strong>'+w.word+'</strong></td><td>'+w.count+'</td><td><div style="background:var(--line);border-radius:4px;height:14px;width:100%;position:relative;"><div style="background:var(--sea);height:100%;width:'+barW+'%;border-radius:4px;"></div></div></td></tr>';
+    const maxWord = topWords[0].count;
+    topWords.forEach((w,i) => {
+      elHtml += '<tr><td>'+(i+1)+'</td><td><strong>'+w.word+'</strong></td><td>'+w.count+'</td>';
+      elHtml += '<td><div style="background:var(--line);border-radius:4px;height:14px;width:100%;position:relative;"><div style="background:var(--sea);height:100%;width:'+Math.round((w.count/maxWord)*100)+'%;border-radius:4px;"></div></div></td></tr>';
     });
     elHtml += '</tbody></table></div></div>';
   }
@@ -1042,23 +1139,23 @@ function renderAnalisis(){
   if(topCorr.length){
     elHtml += '<div class="panel-card"><h3>Correlaciones más Fuertes entre Preguntas</h3><p style="font-size:.78rem;color:var(--palm);margin:-8px 0 12px;">Coeficiente de Pearson (r): positivo = relación directa, negativo = relación inversa</p><div style="overflow-x:auto;">';
     elHtml += '<table class="data-table"><thead><tr><th>Pregunta 1</th><th>Pregunta 2</th><th>Correlación</th><th>Fuerza</th><th>N</th></tr></thead><tbody>';
-    topCorr.forEach(function(c){
-      var absC = Math.abs(c.corr);
-      var fuerza = absC>0.7?'Muy fuerte':absC>0.5?'Fuerte':absC>0.3?'Moderada':absC>0.1?'Débil':'Muy débil';
-      var color = absC>0.5?'var(--palm)':absC>0.3?'var(--gold)':'var(--ink)';
+    topCorr.forEach(c => {
+      const absC = Math.abs(c.corr);
+      const fuerza = absC>0.7?'Muy fuerte':absC>0.5?'Fuerte':absC>0.3?'Moderada':absC>0.1?'Débil':'Muy débil';
+      const color = absC>0.5?'var(--palm)':absC>0.3?'var(--gold)':'var(--ink)';
       elHtml += '<tr><td>'+c.q1.q.es+' ('+c.q1.sec.title+')</td><td>'+c.q2.q.es+' ('+c.q2.sec.title+')</td><td><strong style="color:'+color+';">'+c.corr.toFixed(3)+'</strong></td><td>'+fuerza+'</td><td>'+c.count+'</td></tr>';
     });
     elHtml += '</tbody></table></div></div>';
   }
 
   elHtml += '<div class="panel-card"><h3>Recomendaciones</h3><div style="font-size:.88rem;color:var(--ink);line-height:1.6;">';
-  elHtml += '<p style="margin:0 0 10px;">Basado en el análisis de <strong>'+responses.length+'</strong> respuestas ('+allVals.length+' calificaciones en '+dates.length+' días):</p>';
+  elHtml += '<p style="margin:0 0 10px;">Basado en el análisis de <strong>'+filteredResponses.length+'</strong> respuestas ('+allVals.length+' calificaciones en '+dates.length+' días):</p>';
   elHtml += '<ul style="margin:0;padding-left:20px;">'+recs.join('')+'</ul></div></div>';
 
   elHtml += '<div class="panel-card"><h3>Recomendaciones por Departamento</h3>';
   elHtml += '<div style="font-size:.82rem;color:var(--palm);margin:-8px 0 16px;">Análisis detallado con acciones específicas de mejora para cada área del hotel.</div>';
 
-  var deptActions = {
+  const deptActions = {
     recepcion: {
       actions: [
         {condition:'avg<=2', text:'Implementar programa de capacitación intensiva en atención al cliente para todo el personal de recepción.', priority:'Alta'},
@@ -1090,11 +1187,11 @@ function renderAnalisis(){
         {condition:'avg>3', text:'Mantener calidad. Considerar agregar estación de jugos naturales frescos.', priority:'Baja'},
         {condition:'stdDev>1.2', text:'Calidad inconsistente entre días. Estandarizar recetas y controles de calidad.', priority:'Alta'}
       ],
-      tips:['Asegurar café recién hecho siempre disponible','Tener opciones calientes y frías','Renovar frutas y panes frecuentemente','Personal atento pero no invasivo']
+      tips:['Asegurar café recién hecho siempre disponible','Tener opciones calientes y frías','Renolet frutas y panes frecuentemente','Personal atento pero no invasivo']
     },
     restaurante: {
       actions: [
-        {condition:'avg<=2', text:'Cambiar menú completo y contratar chef consultor para elevar calidad.', priority:'Alta'},
+        {condition:'avg<=2', text:'Cambiar menú completo y contratar chef consultor para elelet calidad.', priority:'Alta'},
         {condition:'avg<=2', text:'Revisar cadena de frío y calidad de ingredientes con proveedores.', priority:'Alta'},
         {condition:'avg<=3', text:'Actualizar carta con platos de temporada y opciones locales.', priority:'Media'},
         {condition:'avg<=3', text:'Mejorar presentación de platos y velocidad de servicio.', priority:'Media'},
@@ -1105,7 +1202,7 @@ function renderAnalisis(){
     },
     bar: {
       actions: [
-        {condition:'avg<=2', text:'Renovar carta de bebidas y capacitar bartenders en cócteles premium.', priority:'Alta'},
+        {condition:'avg<=2', text:'Renolet carta de bebidas y capacitar bartenders en cócteles premium.', priority:'Alta'},
         {condition:'avg<=2', text:'Mejorarpresentación del área y crear ambiente más acogedor.', priority:'Alta'},
         {condition:'avg<=3', text:'Agregar opciones de snacks y tapas para complementar bebidas.', priority:'Media'},
         {condition:'avg<=3', text:'Establecer horarios extendidos en temporada alta.', priority:'Media'},
@@ -1138,90 +1235,78 @@ function renderAnalisis(){
     }
   };
 
-  SECTIONS.forEach(function(sec){
-    var stats = sectionStatsByAvg.find(function(s){return s.key===sec.key;});
+  SECTIONS.forEach(sec => {
+    const stats = sectionStatsByAvg.find(s => s.key === sec.key);
     if(!stats) return;
-    var deptInfo = deptActions[sec.key] || {actions:[],tips:[]};
-    var applicableActions = [];
-    deptInfo.actions.forEach(function(a){
-      var evalAvg = false;
-      if(a.condition.indexOf('avg<=2')!==-1 && stats.avg<=2) evalAvg=true;
-      if(a.condition.indexOf('avg<=3')!==-1 && stats.avg>2 && stats.avg<=3) evalAvg=true;
-      if(a.condition.indexOf('avg>3')!==-1 && stats.avg>3) evalAvg=true;
-      if(a.condition.indexOf('stdDev>1.2')!==-1 && stats.stdDev>1.2) evalAvg=true;
-      if(evalAvg) applicableActions.push(a);
+    const deptInfo = deptActions[sec.key] || { actions: [], tips: [] };
+    const applicableActions = deptInfo.actions.filter(a => {
+      if(a.condition.includes('avg<=2') && stats.avg <= 2) return true;
+      if(a.condition.includes('avg<=3') && stats.avg > 2 && stats.avg <= 3) return true;
+      if(a.condition.includes('avg>3') && stats.avg > 3) return true;
+      if(a.condition.includes('stdDev>1.2') && stats.stdDev > 1.2) return true;
+      return false;
     });
-    if(applicableActions.length===0 && stats.avg>3){
-      applicableActions.push({text:'Departamento con buen desempeño. Mantener estándares y reconocer al personal.', priority:'Baja'});
+    if(applicableActions.length === 0 && stats.avg > 3){
+      applicableActions.push({ text: 'Departamento con buen desempeño. Mantener estándares y reconocer al personal.', priority: 'Baja' });
     }
 
-    var satColor = stats.satisfaction>=70?'var(--palm)':stats.satisfaction>=50?'var(--gold)':'var(--coral)';
-    var statusLabel = stats.satisfaction>=70?'Excelente':stats.satisfaction>=50?'Aceptable':stats.satisfaction>=30?'Mejorable':'Crítico';
-    var statusColor = stats.satisfaction>=70?'var(--palm)':stats.satisfaction>=50?'var(--gold)':'var(--coral)';
+    const satColor = stats.satisfaction >= 70 ? 'var(--palm)' : stats.satisfaction >= 50 ? 'var(--gold)' : 'var(--coral)';
+    const statusLabel = stats.satisfaction >= 70 ? 'Excelente' : stats.satisfaction >= 50 ? 'Aceptable' : stats.satisfaction >= 30 ? 'Mejorable' : 'Crítico';
+    const statusColor = satColor;
 
     elHtml += '<div style="background:var(--sand-light);border-radius:12px;padding:16px;margin-bottom:14px;">';
     elHtml += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">';
-    elHtml += '<span style="font-size:1.5rem;">'+sec.icon+'</span>';
-    elHtml += '<div><h4 style="margin:0;font-family:Fraunces,serif;font-size:1.1rem;color:var(--sea-deep);">'+sec.title+' <span style="font-weight:400;color:var(--palm);font-size:.85rem;">/ '+sec.en+'</span></h4></div>';
+    elHtml += '<span style="font-size:1.5rem;">' + sec.icon + '</span>';
+    elHtml += '<div><h4 style="margin:0;font-family:Fraunces,serif;font-size:1.1rem;color:var(--sea-deep);">' + sec.title + ' <span style="font-weight:400;color:var(--palm);font-size:.85rem;">/ ' + sec.en + '</span></h4></div>';
     elHtml += '<div style="margin-left:auto;text-align:right;">';
-    elHtml += '<div style="font-family:IBM Plex Mono;font-weight:600;font-size:1.3rem;color:'+satColor+';">'+stats.satisfaction+'%</div>';
-    elHtml += '<div style="font-size:.7rem;color:'+statusColor+';font-weight:600;">'+statusLabel+'</div>';
-    elHtml += '</div></div>';
+    elHtml += '<div style="font-family:IBM Plex Mono;font-weight:600;font-size:1.3rem;color:' + satColor + ';">' + stats.satisfaction + '%</div>';
+    elHtml += '<div style="font-size:.7rem;color:' + statusColor + ';font-weight:600;">' + statusLabel + '</div></div></div>';
 
     elHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">';
-    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">'+stats.avg.toFixed(2)+'</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Promedio</div></div>';
-    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">'+stats.median.toFixed(1)+'</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Mediana</div></div>';
-    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">'+stats.stdDev.toFixed(2)+'</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Desv. Est.</div></div>';
-    elHtml += '</div>';
+    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">' + stats.avg.toFixed(2) + '</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Promedio</div></div>';
+    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">' + stats.median.toFixed(1) + '</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Mediana</div></div>';
+    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">' + stats.stdDev.toFixed(2) + '</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Desv. Est.</div></div></div>';
 
-    elHtml += '<div style="margin-bottom:10px;">';
-    elHtml += '<div style="display:flex;justify-content:space-between;font-size:.7rem;margin-bottom:3px;"><span style="color:var(--palm);">Distribución de calificaciones</span></div>';
+    elHtml += '<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:.7rem;margin-bottom:3px;"><span style="color:var(--palm);">Distribución de calificaciones</span></div>';
     elHtml += '<div style="display:flex;height:18px;border-radius:6px;overflow:hidden;">';
-    var totalDist = stats.distribution.reduce(function(a,b){return a+b;},0);
-    var distColors = ['#4C7A63','#8FAE6B','#D9A441','#E8622C','#C94E1E'];
-    var distLabels = ['1','2','3','4','5'];
-    stats.distribution.forEach(function(count, idx){
-      var w = totalDist>0?Math.round((count/totalDist)*100):0;
-      if(w>0) elHtml += '<div style="width:'+w+'%;background:'+distColors[idx]+';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:#fff;font-weight:600;" title="'+distLabels[idx]+': '+count+' ('+w+'%)">'+distLabels[idx]+'</div>';
+    const totalDist = stats.distribution.reduce((a,b) => a+b, 0);
+    const distColors = ['#4C7A63','#8FAE6B','#D9A441','#E8622C','#C94E1E'];
+    stats.distribution.forEach((count, idx) => {
+      const w = totalDist > 0 ? Math.round((count/totalDist)*100) : 0;
+      if(w > 0) elHtml += '<div style="width:' + w + '%;background:' + distColors[idx] + ';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:#fff;font-weight:600;" title="' + (idx+1) + ': ' + count + ' (' + w + '%)">' + (idx+1) + '</div>';
     });
     elHtml += '</div></div>';
 
-    if(applicableActions.length>0){
-      elHtml += '<div style="margin-bottom:10px;"><div style="font-size:.78rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;">Acciones Recomendadas:</div>';
-      elHtml += '<ul style="margin:0;padding-left:18px;font-size:.8rem;color:var(--ink);line-height:1.5;">';
-      applicableActions.forEach(function(a){
-        var pColor = a.priority==='Alta'?'var(--coral)':a.priority==='Media'?'var(--gold)':'var(--palm)';
-        elHtml += '<li style="margin-bottom:6px;">'+a.text+' <span style="display:inline-block;font-size:.65rem;font-weight:600;color:'+pColor+';background:'+pColor+'15;padding:1px 6px;border-radius:4px;margin-left:4px;">'+a.priority+'</span></li>';
+    if(applicableActions.length > 0){
+      elHtml += '<div style="margin-bottom:10px;"><div style="font-size:.78rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;">Acciones Recomendadas:</div><ul style="margin:0;padding-left:18px;font-size:.8rem;color:var(--ink);line-height:1.5;">';
+      applicableActions.forEach(a => {
+        const pColor = a.priority === 'Alta' ? 'var(--coral)' : a.priority === 'Media' ? 'var(--gold)' : 'var(--palm)';
+        elHtml += '<li style="margin-bottom:6px;">' + a.text + ' <span style="display:inline-block;font-size:.65rem;font-weight:600;color:' + pColor + ';background:' + pColor + '15;padding:1px 6px;border-radius:4px;margin-left:4px;">' + a.priority + '</span></li>';
       });
       elHtml += '</ul></div>';
     }
 
     if(deptInfo.tips && deptInfo.tips.length){
-      elHtml += '<div><div style="font-size:.78rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;">Buenas Prácticas:</div>';
-      elHtml += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
-      deptInfo.tips.forEach(function(tip){
-        elHtml += '<span style="font-size:.72rem;background:var(--sea);color:#fff;padding:3px 8px;border-radius:12px;">'+tip+'</span>';
-      });
+      elHtml += '<div><div style="font-size:.78rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;">Buenas Prácticas:</div><div style="display:flex;flex-wrap:wrap;gap:4px;">';
+      deptInfo.tips.forEach(tip => { elHtml += '<span style="font-size:.72rem;background:var(--sea);color:#fff;padding:3px 8px;border-radius:12px;">' + tip + '</span>'; });
       elHtml += '</div></div>';
     }
-
     elHtml += '</div>';
   });
 
   elHtml += '</div>';
-
   el.innerHTML = elHtml;
 
   charts.analisis_dist = new Chart(document.getElementById('chart_analisis_dist'), {
     type:'bar',
     data:{
-      labels: sectionStatsByAvg.map(function(s){return s.title;}),
-      datasets:[
-        {label:'Muy Bueno (1)', data:sectionStatsByAvg.map(function(s){return s.distribution[0];}), backgroundColor:'#4C7A63', borderRadius:3},
-        {label:'Bueno (2)', data:sectionStatsByAvg.map(function(s){return s.distribution[1];}), backgroundColor:'#8FAE6B', borderRadius:3},
-        {label:'Regular (3)', data:sectionStatsByAvg.map(function(s){return s.distribution[2];}), backgroundColor:'#D9A441', borderRadius:3},
-        {label:'Deficiente (4)', data:sectionStatsByAvg.map(function(s){return s.distribution[3];}), backgroundColor:'#E8622C', borderRadius:3},
-        {label:'Muy deficiente (5)', data:sectionStatsByAvg.map(function(s){return s.distribution[4];}), backgroundColor:'#C94E1E', borderRadius:3}
+      labels: sectionStatsByAvg.map(s => s.title),
+      datasets: [
+        {label:'Muy Bueno (1)', data:sectionStatsByAvg.map(s => s.distribution[0]), backgroundColor:'#4C7A63', borderRadius:3},
+        {label:'Bueno (2)', data:sectionStatsByAvg.map(s => s.distribution[1]), backgroundColor:'#8FAE6B', borderRadius:3},
+        {label:'Regular (3)', data:sectionStatsByAvg.map(s => s.distribution[2]), backgroundColor:'#D9A441', borderRadius:3},
+        {label:'Deficiente (4)', data:sectionStatsByAvg.map(s => s.distribution[3]), backgroundColor:'#E8622C', borderRadius:3},
+        {label:'Muy deficiente (5)', data:sectionStatsByAvg.map(s => s.distribution[4]), backgroundColor:'#C94E1E', borderRadius:3}
       ]
     },
     options:{
@@ -1231,30 +1316,24 @@ function renderAnalisis(){
     }
   });
 
-  var trendDays = [];
-  for(var ti=Math.min(13,dates.length-1);ti>=0;ti--){
-    trendDays.push(dates[dates.length-1-ti]);
+  const trendDays = [];
+  for(let ti = Math.min(13, dates.length - 1); ti >= 0; ti--){
+    trendDays.push(dates[dates.length - 1 - ti]);
   }
-  var trendAvgs = trendDays.map(function(d){
-    var dayRatings = [];
-    byDate[d].forEach(function(r){Object.values(r.ratings).forEach(function(v){if(v)dayRatings.push(v);});});
-    return dayRatings.length ? dayRatings.reduce(function(a,b){return a+b;},0)/dayRatings.length : null;
+  const trendAvgs = trendDays.map(d => {
+    const dayRatings = [];
+    byDate[d].forEach(r => Object.values(r.ratings).forEach(v => { if(v) dayRatings.push(v); }));
+    return dayRatings.length ? dayRatings.reduce((a,b) => a+b, 0) / dayRatings.length : null;
   });
 
   charts.analisis_trend = new Chart(document.getElementById('chart_analisis_trend'), {
     type:'line',
     data:{
-      labels:trendDays.map(function(d){return d.slice(5);}),
+      labels: trendDays.map(d => d.slice(5)),
       datasets:[{
-        label:'Promedio diario',
-        data:trendAvgs,
-        borderColor:'#0F4C4A',
-        backgroundColor:'rgba(15,76,74,0.1)',
-        fill:true,
-        tension:.3,
-        spanGaps:true,
-        pointRadius:4,
-        pointBackgroundColor:'#E8622C'
+        label:'Promedio diario', data:trendAvgs, borderColor:'#0F4C4A',
+        backgroundColor:'rgba(15,76,74,0.1)', fill:true, tension:.3, spanGaps:true,
+        pointRadius:4, pointBackgroundColor:'#E8622C'
       }]
     },
     options:{
@@ -1264,22 +1343,13 @@ function renderAnalisis(){
     }
   });
 
-  var motiveData = [motiveCounts.ocio, motiveCounts.trabajo, motiveCounts.otros];
   charts.analisis_motive = new Chart(document.getElementById('chart_analisis_motive'), {
     type:'doughnut',
     data:{
       labels:['Ocio','Trabajo','Otros'],
-      datasets:[{
-        data:motiveData,
-        backgroundColor:['#4C7A63','#0F4C4A','#D9A441'],
-        borderWidth:2,
-        borderColor:'#fff'
-      }]
+      datasets:[{ data:[motiveCounts.ocio, motiveCounts.trabajo, motiveCounts.otros], backgroundColor:['#4C7A63','#0F4C4A','#D9A441'], borderWidth:2, borderColor:'#fff' }]
     },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{position:'bottom'}}
-    }
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom'}} }
   });
 }
 
@@ -1384,14 +1454,14 @@ function renderDatos(){
 async function deleteResponse(id){
   if(!confirm('¿Eliminar esta respuesta?')) return;
   responses = responses.filter(r=>r.id!==id);
-  saveResponses();
+  await saveResponses();
   renderDatos();
   toast('Respuesta eliminada');
 }
 async function clearAll(){
   if(!confirm('Esto eliminará TODAS las respuestas guardadas. ¿Continuar?')) return;
   responses = [];
-  saveResponses();
+  await saveResponses();
   renderDatos();
   toast('Todas las respuestas fueron eliminadas');
 }
@@ -1472,7 +1542,7 @@ async function handleImportJSON(file){
       responses.push(r);
       added++;
     });
-    saveResponses();
+    await saveResponses();
     renderDatos();
     toast(`${added} respuesta(s) importada(s) del respaldo`);
   }catch(e){
@@ -1588,7 +1658,7 @@ async function handleImportExcel(file){
       added++;
     }
     if(added===0){ toast('No se encontraron filas de datos para importar'); return; }
-    saveResponses();
+    await saveResponses();
     renderDatos();
     toast(`${added} respuesta(s) importada(s) del Excel`);
   }catch(e){
@@ -1630,17 +1700,19 @@ async function pushResponseToSheet(r){
 
 async function syncAllToSheet(){
   if(!sheetsUrl){ toast('Primero guarda la URL de tu Apps Script'); return; }
-  toast('Sincronizando...');
+  showLoading('Sincronizando con Google Sheets...');
   let ok=0;
   for(const r of responses){
     try{ await fetch(sheetsUrl, {method:'POST', body: JSON.stringify(buildSheetPayload(r))}); ok++; }
     catch(e){}
   }
+  hideLoading();
   toast(`${ok} de ${responses.length} respuesta(s) sincronizada(s)`);
 }
 
 async function pullFromSheet(){
   if(!sheetsUrl){ toast('Primero guarda la URL de tu Apps Script'); return; }
+  showLoading('Trayendo datos desde Google Sheets...');
   try{
     const res = await fetch(sheetsUrl);
     const data = await res.json();
@@ -1660,17 +1732,20 @@ async function pullFromSheet(){
       });
       added++;
     });
-    saveResponses();
+    await saveResponses();
     renderDatos();
+    hideLoading();
     toast(`${added} respuesta(s) traída(s) desde Sheets`);
   }catch(e){
+    hideLoading();
     toast('No se pudo conectar con Google Sheets. Revisa la URL y los permisos.');
   }
 }
 
-(function init(){
-  loadResponses();
+(async function init(){
+  await loadResponses();
   loadSheetsUrl();
+  setupWizardDelegation();
   renderWizard();
 })();
 </script>
