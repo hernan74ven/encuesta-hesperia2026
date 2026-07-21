@@ -1106,6 +1106,177 @@ function buildRecommendations(data, topCorr){
   return r;
 }
 
+function buildDeptAnalysis(filteredResponses, sectionStatsByAvg){
+  const deptKeywords = {
+    recepcion: {
+      negative: ['recepcion','check-in','check-out','espera','lento','demora','colas','personal recepcion','actitud','trato recepcion'],
+      positive: ['amable','rapido','eficiente','bienvenido','atento','profesional','cordial','sonrisa','bien recibido']
+    },
+    habitacion: {
+      negative: ['habitacion','cama','colchon','baño','ducha','agua caliente','fria','wifi','aire acondicionado','ac','moho','humedad','ruido','puerta','ventana','tumbona','silla','limpieza hab','mobilario','deterioro','rompido'],
+      positive: ['comoda','limpia','bonita','amplia','silenciosa','vista','comoda','bien equipada','cojines','toallas']
+    },
+    desayuno: {
+      negative: ['desayuno','buffet','comida fria','poca variedad','pan duro','cafe','jugo','fruta','colas','espera desayuno','calidad desayuno'],
+      positive: ['variedad','fresco','caliente','delicioso','buen buffet','opciones','frutas frescas','recien hecho']
+    },
+    restaurante: {
+      negative: ['restaurante','comida','sabor','porcion','poca','pescado','carne','ensalada','tiempo espera restaurante','temperatura','fria','caliente restaurante'],
+      positive: ['delicioso','sabroso','bien preparado','buena carta','variedad restaurante','presentacion','cocinero']
+    },
+    bar: {
+      negative: ['bar','coctel','bebida','trago','licor','cerveza','sabor bar','fuerte','agria','agua','temprano cierra','horario bar'],
+      positive: ['buen trato bar','deliciosos','variedad bebidas','feliz hora','happy hour','bartender','creativos']
+    },
+    zonas: {
+      negative: ['piscina','playa','toldos','tumbonas','sillas playa','limpieza zona','baños externos','jardin','areas verdes','deterioro','suciedad','basura','iluminacion'],
+      positive: ['bonitas zonas','cuidadas','limpias','hermosas','bien conservadas','playa hermosa','piscinas bonitas','jardines']
+    },
+    animacion: {
+      negative: ['animacion','entretenimiento','actividades','musica','fiesta','aburrido','poco variado','horario animacion','ruido animacion'],
+      positive: ['divertida','excelente animacion','personal animacion','bien animado','variada','profesional animacion','ejercicio','yoga']
+    }
+  };
+
+  const generalNegative = ['comida','servicio','personal','hotel','instalacion','wifi','electricidad','planta','mantenimiento','remodelar','mejorar','empeorar','deficiente','malo','peor','horrible','pésimo','insatisf','falta','falto','carece'];
+  const generalPositive = ['excelente','perfecto','maravilloso','increible','bueno','bien','hermoso','impecable','fantastico','genial','exelente','exelente','100/100','recomiendo'];
+
+  function analyzeText(text){
+    if(!text) return { negative:[], positive:[] };
+    const lower = normalizeHeader(text);
+    const neg = [], pos = [];
+    generalNegative.forEach(kw => { if(lower.includes(kw)) neg.push(kw); });
+    generalPositive.forEach(kw => { if(lower.includes(kw)) pos.push(kw); });
+    return { negative:neg, positive:pos };
+  }
+
+  let html = '<div class="panel-card"><h3>Análisis por Departamento</h3>';
+  html += '<div style="font-size:.82rem;color:var(--palm);margin:-8px 0 16px;">Análisis de fortalezas, debilidades y recomendaciones basado en la opinión real de los huéspedes.</div>';
+
+  SECTIONS.forEach(sec => {
+    const stats = sectionStatsByAvg.find(s => s.key === sec.key);
+    if(!stats) return;
+    const secKeys = sec.questions.map(q => sec.key + '_' + q.code);
+
+    const deptFeedback = { negative:[], positive:[], comments:[] };
+    filteredResponses.forEach(r => {
+      const negText = r.menosGusto || '';
+      const posText = r.masGusto || '';
+      const sugText = r.sugerencias || '';
+      const comText = r.comentarios || '';
+
+      const negAnalysis = analyzeText(negText + ' ' + sugText);
+      const posAnalysis = analyzeText(posText + ' ' + comText);
+
+      negAnalysis.negative.forEach(k => deptFeedback.negative.push(k));
+      posAnalysis.positive.forEach(k => deptFeedback.positive.push(k));
+
+      if(negText || posText || sugText || comText){
+        deptFeedback.comments.push({
+          negative: negText + ' ' + sugText,
+          positive: posText + ' ' + comText,
+          ratings: r.ratings
+        });
+      }
+    });
+
+    const negCounts = {};
+    deptFeedback.negative.forEach(k => { negCounts[k] = (negCounts[k]||0) + 1; });
+    const sortedNeg = Object.entries(negCounts).sort((a,b) => b[1]-a[1]).slice(0,5);
+
+    const posCounts = {};
+    deptFeedback.positive.forEach(k => { posCounts[k] = (posCounts[k]||0) + 1; });
+    const sortedPos = Object.entries(posCounts).sort((a,b) => b[1]-a[1]).slice(0,5);
+
+    const specificNeg = [];
+    const specificPos = [];
+    const deptKws = deptKeywords[sec.key] || { negative:[], positive:[] };
+    deptFeedback.comments.forEach(c => {
+      const negLower = normalizeHeader(c.negative);
+      const posLower = normalizeHeader(c.positive);
+      deptKws.negative.forEach(kw => { if(negLower.includes(kw)) specificNeg.push(kw); });
+      deptKws.positive.forEach(kw => { if(posLower.includes(kw)) specificPos.push(kw); });
+    });
+    const sortedSpecificNeg = {};
+    specificNeg.forEach(k => { sortedSpecificNeg[k] = (sortedSpecificNeg[k]||0)+1; });
+    const sortedSpecificPos = {};
+    specificPos.forEach(k => { sortedSpecificPos[k] = (sortedSpecificPos[k]||0)+1; });
+
+    const satColor = stats.satisfaction >= 70 ? 'var(--palm)' : stats.satisfaction >= 50 ? 'var(--gold)' : 'var(--coral)';
+    const statusLabel = stats.satisfaction >= 70 ? 'Excelente' : stats.satisfaction >= 50 ? 'Aceptable' : stats.satisfaction >= 30 ? 'Mejorable' : 'Crítico';
+
+    html += '<div style="background:var(--sand-light);border-radius:12px;padding:16px;margin-bottom:14px;">';
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">';
+    html += '<span style="font-size:1.5rem;">' + sec.icon + '</span>';
+    html += '<div><h4 style="margin:0;font-family:Fraunces,serif;font-size:1.1rem;color:var(--sea-deep);">' + sec.title + ' <span style="font-weight:400;color:var(--palm);font-size:.85rem;">/ ' + sec.en + '</span></h4></div>';
+    html += '<div style="margin-left:auto;text-align:right;">';
+    html += '<div style="font-family:IBM Plex Mono;font-weight:600;font-size:1.3rem;color:' + satColor + ';">' + stats.satisfaction + '%</div>';
+    html += '<div style="font-size:.7rem;color:' + satColor + ';font-weight:600;">' + statusLabel + '</div></div></div>';
+
+    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">';
+    html += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">' + stats.avg.toFixed(2) + '</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Promedio</div></div>';
+    html += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">' + stats.median.toFixed(1) + '</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Mediana</div></div>';
+    html += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">' + stats.stdDev.toFixed(2) + '</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Desv. Est.</div></div></div>';
+
+    html += '<div style="margin-bottom:12px;"><div style="font-size:.72rem;margin-bottom:4px;color:var(--palm);">Distribución de calificaciones</div>';
+    html += '<div style="display:flex;height:16px;border-radius:6px;overflow:hidden;">';
+    const totalDist = stats.distribution.reduce((a,b)=>a+b,0);
+    const distColors = ['#4C7A63','#8FAE6B','#D9A441','#E8622C','#C94E1E'];
+    stats.distribution.forEach((count, idx) => {
+      const w = totalDist > 0 ? Math.round((count/totalDist)*100) : 0;
+      if(w > 0) html += '<div style="width:'+w+'%;background:'+distColors[idx]+';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:#fff;font-weight:600;">'+(idx+1)+'</div>';
+    });
+    html += '</div></div>';
+
+    const debilidades = Object.entries(sortedSpecificNeg).slice(0,3);
+    const fortalezas = Object.entries(sortedSpecificPos).slice(0,3);
+
+    if(debilidades.length > 0){
+      html += '<div style="margin-bottom:10px;"><div style="font-size:.78rem;font-weight:600;color:var(--coral);margin-bottom:6px;">⚠️ Debilidades Detectadas:</div><div style="display:flex;flex-wrap:wrap;gap:4px;">';
+      debilidades.forEach(([kw, count]) => {
+        html += '<span style="font-size:.72rem;background:var(--coral);color:#fff;padding:3px 8px;border-radius:12px;">'+kw+' ('+count+')</span>';
+      });
+      html += '</div></div>';
+    }
+
+    if(fortalezas.length > 0){
+      html += '<div style="margin-bottom:10px;"><div style="font-size:.78rem;font-weight:600;color:var(--palm);margin-bottom:6px;">✅ Fortalezas Identificadas:</div><div style="display:flex;flex-wrap:wrap;gap:4px;">';
+      fortalezas.forEach(([kw, count]) => {
+        html += '<span style="font-size:.72rem;background:var(--palm);color:#fff;padding:3px 8px;border-radius:12px;">'+kw+' ('+count+')</span>';
+      });
+      html += '</div></div>';
+    }
+
+    const recommendations = [];
+    if(stats.avg <= 2.5) recommendations.push({text:'Capacitación intensiva en atención al cliente. Revisar procesos y estándares del departamento.', priority:'Alta'});
+    if(stats.avg <= 3 && stats.avg > 2.5) recommendations.push({text:'Mejorar consistencia del servicio. Establecer protocolos y checklist de calidad.', priority:'Media'});
+    if(stats.avg > 3.5) recommendations.push({text:'Mantener excelencia. Considerar programa de reconocimiento al personal.', priority:'Baja'});
+    if(stats.stdDev > 1.2) recommendations.push({text:'Alta variabilidad: capacitar personal inconsistente y estandarizar procesos.', priority:'Alta'});
+    if(sortedSpecificNeg.length > 0){
+      const topNeg = sortedSpecificNeg[0][0];
+      if(topNeg.includes('comida') || topNeg.includes('buffet')) recommendations.push({text:'Revisar calidad y variedad gastronómica. Implementar controles de calidad.', priority:'Alta'});
+      if(topNeg.includes('wifi') || topNeg.includes('internet')) recommendations.push({text:'Invertir en infraestructura de internet. Ampliar cobertura y velocidad.', priority:'Alta'});
+      if(topNeg.includes('personal') || topNeg.includes('trato')) recommendations.push({text:'Capacitar al personal en servicio al cliente. Implementar protocolo de atención.', priority:'Alta'});
+      if(topNeg.includes('piscina') || topNeg.includes('playa')) recommendations.push({text:'Mejorar mantenimiento de áreas comunes. Aumentar limpieza y dotación.', priority:'Media'});
+      if(topNeg.includes('limpieza') || topNeg.includes('suciedad')) recommendations.push({text:'Aumentar frecuencia de limpieza. Asignar personal dedicado por zona.', priority:'Alta'});
+      if(topNeg.includes('musica') || topNeg.includes('ruido')) recommendations.push({text:'Ajustar niveles de sonido y horarios de entretenimiento.', priority:'Media'});
+      if(topNeg.includes('toldos') || topNeg.includes('tumbonas')) recommendations.push({text:'Incrementar dotación de toldos, tumbonas y sillas en áreas de descanso.', priority:'Media'});
+      if(topNeg.includes('agua caliente') || topNeg.includes('fria')) recommendations.push({text:'Revisar sistema de agua caliente. Priorizar reparación de calentadores.', priority:'Alta'});
+    }
+    if(recommendations.length === 0) recommendations.push({text:'Departamento con buen desempeño. Mantener estándares actuales.', priority:'Baja'});
+
+    html += '<div style="margin-bottom:8px;"><div style="font-size:.78rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;">📋 Recomendaciones:</div><ul style="margin:0;padding-left:18px;font-size:.8rem;color:var(--ink);line-height:1.5;">';
+    recommendations.forEach(a => {
+      const pColor = a.priority==='Alta'?'var(--coral)':a.priority==='Media'?'var(--gold)':'var(--palm)';
+      html += '<li style="margin-bottom:5px;">'+a.text+' <span style="display:inline-block;font-size:.65rem;font-weight:600;color:'+pColor+';background:'+pColor+'15;padding:1px 6px;border-radius:4px;margin-left:4px;">'+a.priority+'</span></li>';
+    });
+    html += '</ul></div></div>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
 function renderAnalisis(){
   destroyCharts('analisis_');
   const el = document.getElementById('sub-analisis');
@@ -1300,148 +1471,7 @@ function renderAnalisis(){
   elHtml += '<p style="margin:0 0 10px;">Basado en el análisis de <strong>'+filteredResponses.length+'</strong> respuestas ('+allVals.length+' calificaciones en '+dates.length+' días):</p>';
   elHtml += '<ul style="margin:0;padding-left:20px;">'+recs.join('')+'</ul></div></div>';
 
-  elHtml += '<div class="panel-card"><h3>Recomendaciones por Departamento</h3>';
-  elHtml += '<div style="font-size:.82rem;color:var(--palm);margin:-8px 0 16px;">Análisis detallado con acciones específicas de mejora para cada área del hotel.</div>';
-
-  const deptActions = {
-    recepcion: {
-      actions: [
-        {condition:'avg<=2', text:'Implementar programa de capacitación intensiva en atención al cliente para todo el personal de recepción.', priority:'Alta'},
-        {condition:'avg<=2', text:'Reducir tiempos de check-in/check-out mediante sistema digital o personal adicional en horas pico.', priority:'Alta'},
-        {condition:'avg<=3', text:'Establecer protocolo de bienvenida estandarizado con saludo personalizado al huésped.', priority:'Media'},
-        {condition:'avg<=3', text:'Implementar sistema de encuesta rápida post-check-in para detectar problemas inmediatos.', priority:'Media'},
-        {condition:'avg>3', text:'Mantener el excelente nivel de servicio. Considerar programa de reconocimiento al personal.', priority:'Baja'},
-        {condition:'stdDev>1.2', text:'Alta variabilidad en las respuestas. Capacitar al personal inconsistente y estandarizar procesos.', priority:'Alta'}
-      ],
-      tips:['Ofrecer agua o refresco de bienvenida','Personalizar la experiencia según el motivo del viaje','Proporcionar información clara sobre amenities del hotel','Tener protocolo para quejas y problemas']
-    },
-    habitacion: {
-      actions: [
-        {condition:'avg<=2', text:'Realizar inspección completa de habitaciones y priorizar mantenimiento correctivo urgente.', priority:'Alta'},
-        {condition:'avg<=2', text:'Establecer checklist de limpieza y mantenimiento diario para cada habitación.', priority:'Alta'},
-        {condition:'avg<=3', text:'Actualizar amenidades: jabones, toallas, minibar. Invertir en calidad de colchones.', priority:'Media'},
-        {condition:'avg<=3', text:'Implementar sistema de reporte de mantenimiento en tiempo real desde la habitación.', priority:'Media'},
-        {condition:'avg>3', text:'Mantener estándares actuales. Considerar upgrades graduales de mobiliario.', priority:'Baja'},
-        {condition:'stdDev>1.2', text:'Habitaciones con calidad inconsistente. Auditar individualmente cada unidad.', priority:'Alta'}
-      ],
-      tips:['Garantizar temperatura adecuada en todas las habitaciones','Asegurar señal WiFi fuerte en todas las habitaciones','Ofrecer servicio de habitaciones puntual','Mantenimiento preventivo trimestral de baños']
-    },
-    desayuno: {
-      actions: [
-        {condition:'avg<=2', text:'Revisar proveedores de alimentos y mejorar variedad del buffet inmediatamente.', priority:'Alta'},
-        {condition:'avg<=2', text:'Ampliar horario de desayuno y agregar estaciones de cocina en vivo.', priority:'Alta'},
-        {condition:'avg<=3', text:'Agregar opciones vegetarianas, veganas y sin gluten claramente identificadas.', priority:'Media'},
-        {condition:'avg<=3', text:'Mejorar presentación visual del buffet y señalización de productos.', priority:'Media'},
-        {condition:'avg>3', text:'Mantener calidad. Considerar agregar estación de jugos naturales frescos.', priority:'Baja'},
-        {condition:'stdDev>1.2', text:'Calidad inconsistente entre días. Estandarizar recetas y controles de calidad.', priority:'Alta'}
-      ],
-      tips:['Asegurar café recién hecho siempre disponible','Tener opciones calientes y frías','Renolet frutas y panes frecuentemente','Personal atento pero no invasivo']
-    },
-    restaurante: {
-      actions: [
-        {condition:'avg<=2', text:'Cambiar menú completo y contratar chef consultor para elelet calidad.', priority:'Alta'},
-        {condition:'avg<=2', text:'Revisar cadena de frío y calidad de ingredientes con proveedores.', priority:'Alta'},
-        {condition:'avg<=3', text:'Actualizar carta con platos de temporada y opciones locales.', priority:'Media'},
-        {condition:'avg<=3', text:'Mejorar presentación de platos y velocidad de servicio.', priority:'Media'},
-        {condition:'avg>3', text:'Mantener calidad gastronómica. Considerar eventos especiales temáticos.', priority:'Baja'},
-        {condition:'stdDev>1.2', text:'Servicio inconsistente. Capacitar personal de cocina y sala.', priority:'Alta'}
-      ],
-      tips:['Ofrecer platos típicos de la región','Tener carta de vinos curada','Tiempo máximo de espera: 15 minutos','Ambientación musical adecuada']
-    },
-    bar: {
-      actions: [
-        {condition:'avg<=2', text:'Renolet carta de bebidas y capacitar bartenders en cócteles premium.', priority:'Alta'},
-        {condition:'avg<=2', text:'Mejorarpresentación del área y crear ambiente más acogedor.', priority:'Alta'},
-        {condition:'avg<=3', text:'Agregar opciones de snacks y tapas para complementar bebidas.', priority:'Media'},
-        {condition:'avg<=3', text:'Establecer horarios extendidos en temporada alta.', priority:'Media'},
-        {condition:'avg>3', text:'Mantener oferta actual. Considerar noche de cócteles o eventos.', priority:'Baja'},
-        {condition:'stdDev>1.2', text:'Variedad en calidad entre horarios. Estandarizar preparaciones.', priority:'Alta'}
-      ],
-      tips:['Tener happy hour especial','Offer咖啡 de calidad premium','Música de fondo sin ser molesta','Snacks gratis de cortesía']
-    },
-    zonas: {
-      actions: [
-        {condition:'avg<=2', text:'Contratar equipo de limpieza dedicado exclusivamente a zonas comunes.', priority:'Alta'},
-        {condition:'avg<=2', text:'Invertir en mantenimiento de piscina y áreas exteriores urgentemente.', priority:'Alta'},
-        {condition:'avg<=3', text:'Aumentar frecuencia de limpieza en áreas de alto tráfico.', priority:'Media'},
-        {condition:'avg<=3', text:'Mejorar señalización y mantener áreas verdes impecables.', priority:'Media'},
-        {condition:'avg>3', text:'Mantener excelencia. Considerar mejoras estéticas graduales.', priority:'Baja'},
-        {condition:'stdDev>1.2', text:'Algunas áreas en mejor estado que otras. Inspección completa.', priority:'Alta'}
-      ],
-      tips:['Limpieza de piscina cada 4 horas','Toallas limpias siempre disponibles','Áreas de descanso con sombra','Señalización clara en todas las zonas']
-    },
-    animacion: {
-      actions: [
-        {condition:'avg<=2', text:'Contratar animador profesional y crear programación diaria variada.', priority:'Alta'},
-        {condition:'avg<=2', text:'Invertir en equipamiento de entretenimiento y actividades acuáticas.', priority:'Alta'},
-        {condition:'avg<=3', text:'Ampliar oferta de actividades: yoga, excursiones, talleres.', priority:'Media'},
-        {condition:'avg<=3', text:'Crear horario de actividades publicado en lobby y habitaciones.', priority:'Media'},
-        {condition:'avg>3', text:'Mantener programa actual. Agregar actividades nocturnas.', priority:'Baja'},
-        {condition:'stdDev>1.2', text:'Actividades muy variables. Estandarizar calidad de programación.', priority:'Alta'}
-      ],
-      tips:['Actividades para todas las edades','Programa bilingüe (español/inglés)','Eventos especiales fines de semana','Espacios para relax y diversión']
-    }
-  };
-
-  SECTIONS.forEach(sec => {
-    const stats = sectionStatsByAvg.find(s => s.key === sec.key);
-    if(!stats) return;
-    const deptInfo = deptActions[sec.key] || { actions: [], tips: [] };
-    const applicableActions = deptInfo.actions.filter(a => {
-      if(a.condition.includes('avg<=2') && stats.avg <= 2) return true;
-      if(a.condition.includes('avg<=3') && stats.avg > 2 && stats.avg <= 3) return true;
-      if(a.condition.includes('avg>3') && stats.avg > 3) return true;
-      if(a.condition.includes('stdDev>1.2') && stats.stdDev > 1.2) return true;
-      return false;
-    });
-    if(applicableActions.length === 0 && stats.avg > 3){
-      applicableActions.push({ text: 'Departamento con buen desempeño. Mantener estándares y reconocer al personal.', priority: 'Baja' });
-    }
-
-    const satColor = stats.satisfaction >= 70 ? 'var(--palm)' : stats.satisfaction >= 50 ? 'var(--gold)' : 'var(--coral)';
-    const statusLabel = stats.satisfaction >= 70 ? 'Excelente' : stats.satisfaction >= 50 ? 'Aceptable' : stats.satisfaction >= 30 ? 'Mejorable' : 'Crítico';
-    const statusColor = satColor;
-
-    elHtml += '<div style="background:var(--sand-light);border-radius:12px;padding:16px;margin-bottom:14px;">';
-    elHtml += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">';
-    elHtml += '<span style="font-size:1.5rem;">' + sec.icon + '</span>';
-    elHtml += '<div><h4 style="margin:0;font-family:Fraunces,serif;font-size:1.1rem;color:var(--sea-deep);">' + sec.title + ' <span style="font-weight:400;color:var(--palm);font-size:.85rem;">/ ' + sec.en + '</span></h4></div>';
-    elHtml += '<div style="margin-left:auto;text-align:right;">';
-    elHtml += '<div style="font-family:IBM Plex Mono;font-weight:600;font-size:1.3rem;color:' + satColor + ';">' + stats.satisfaction + '%</div>';
-    elHtml += '<div style="font-size:.7rem;color:' + statusColor + ';font-weight:600;">' + statusLabel + '</div></div></div>';
-
-    elHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">';
-    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">' + stats.avg.toFixed(2) + '</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Promedio</div></div>';
-    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">' + stats.median.toFixed(1) + '</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Mediana</div></div>';
-    elHtml += '<div style="background:#fff;border-radius:8px;padding:8px;text-align:center;"><div style="font-family:IBM Plex Mono;font-weight:600;font-size:1rem;color:var(--sea-deep);">' + stats.stdDev.toFixed(2) + '</div><div style="font-size:.65rem;color:var(--palm);text-transform:uppercase;">Desv. Est.</div></div></div>';
-
-    elHtml += '<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:.7rem;margin-bottom:3px;"><span style="color:var(--palm);">Distribución de calificaciones</span></div>';
-    elHtml += '<div style="display:flex;height:18px;border-radius:6px;overflow:hidden;">';
-    const totalDist = stats.distribution.reduce((a,b) => a+b, 0);
-    const distColors = ['#4C7A63','#8FAE6B','#D9A441','#E8622C','#C94E1E'];
-    stats.distribution.forEach((count, idx) => {
-      const w = totalDist > 0 ? Math.round((count/totalDist)*100) : 0;
-      if(w > 0) elHtml += '<div style="width:' + w + '%;background:' + distColors[idx] + ';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:#fff;font-weight:600;" title="' + (idx+1) + ': ' + count + ' (' + w + '%)">' + (idx+1) + '</div>';
-    });
-    elHtml += '</div></div>';
-
-    if(applicableActions.length > 0){
-      elHtml += '<div style="margin-bottom:10px;"><div style="font-size:.78rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;">Acciones Recomendadas:</div><ul style="margin:0;padding-left:18px;font-size:.8rem;color:var(--ink);line-height:1.5;">';
-      applicableActions.forEach(a => {
-        const pColor = a.priority === 'Alta' ? 'var(--coral)' : a.priority === 'Media' ? 'var(--gold)' : 'var(--palm)';
-        elHtml += '<li style="margin-bottom:6px;">' + a.text + ' <span style="display:inline-block;font-size:.65rem;font-weight:600;color:' + pColor + ';background:' + pColor + '15;padding:1px 6px;border-radius:4px;margin-left:4px;">' + a.priority + '</span></li>';
-      });
-      elHtml += '</ul></div>';
-    }
-
-    if(deptInfo.tips && deptInfo.tips.length){
-      elHtml += '<div><div style="font-size:.78rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;">Buenas Prácticas:</div><div style="display:flex;flex-wrap:wrap;gap:4px;">';
-      deptInfo.tips.forEach(tip => { elHtml += '<span style="font-size:.72rem;background:var(--sea);color:#fff;padding:3px 8px;border-radius:12px;">' + tip + '</span>'; });
-      elHtml += '</div></div>';
-    }
-    elHtml += '</div>';
-  });
-
+  elHtml += buildDeptAnalysis(filteredResponses, sectionStatsByAvg);
   elHtml += '</div>';
   el.innerHTML = elHtml;
 
