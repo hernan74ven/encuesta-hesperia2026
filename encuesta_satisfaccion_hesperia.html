@@ -239,6 +239,21 @@ table.data-table tr:nth-child(even){background:var(--sand-light);}
 </div>
 <style>
 @keyframes spin{to{transform:rotate(360deg);}}
+@keyframes confetti-fall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
+.confetti-piece{position:fixed;width:10px;height:10px;top:-10px;z-index:200;border-radius:2px;animation:confetti-fall linear forwards;pointer-events:none;}
+@keyframes check-pop{0%{transform:scale(0);opacity:0}50%{transform:scale(1.3)}100%{transform:scale(1);opacity:1}}
+.check-overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:199;display:flex;align-items:center;justify-content:center;background:rgba(10,54,52,0.3);animation:fadein .3s ease;}
+.check-overlay .check-circle{width:80px;height:80px;border-radius:50%;background:var(--palm);display:flex;align-items:center;justify-content:center;animation:check-pop .5s ease forwards;}
+.check-overlay .check-circle svg{width:40px;height:40px;stroke:#fff;stroke-width:4;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+@media(max-width:480px){
+  .kpi-grid.kpi-compact .kpi{padding:8px;}
+  .kpi-grid.kpi-compact .kpi .kval{font-size:.95rem;}
+}
+@media print{
+  .top,.subnav,.tabs,.filter-bar,.btn,.toolbar,.pin-gate{display:none!important;}
+  .panel-card{break-inside:avoid;box-shadow:none;border:1px solid #ddd;}
+  .app{padding:0;}
+}
 </style>
 
 <script>
@@ -291,6 +306,7 @@ const SECTIONS = [
 const RATE_LABELS = ['','Muy Bueno','Bueno','Regular','Deficiente','Muy deficiente'];
 const RATE_LABELS_EN = ['','Excellent','Good','Average','Poor','Very poor'];
 const STORAGE_KEY = 'hesperia-encuesta-respuestas';
+const DRAFT_KEY = 'hesperia-encuesta-borrador';
 const SHEETS_URL_KEY = 'hesperia-sheets-webapp-url';
 const STAFF_PIN = '2026';
 const DB_NAME = 'HesperiaEncuesta';
@@ -366,6 +382,63 @@ function toast(msg){
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2200);
 }
+
+function saveDraft(){
+  try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(current)); }catch(e){}
+}
+
+function loadDraft(){
+  try{
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if(raw){ current = JSON.parse(raw); return true; }
+  }catch(e){}
+  return false;
+}
+
+function clearDraft(){
+  try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
+}
+
+function fireConfetti(){
+  const colors = ['#E8622C','#D9A441','#4C7A63','#0F4C4A','#8FAE6B','#F0E6D2'];
+  for(let i=0;i<60;i++){
+    const el = document.createElement('div');
+    el.className = 'confetti-piece';
+    el.style.left = Math.random()*100+'%';
+    el.style.background = colors[Math.floor(Math.random()*colors.length)];
+    el.style.width = (Math.random()*8+4)+'px';
+    el.style.height = (Math.random()*8+4)+'px';
+    el.style.borderRadius = Math.random()>0.5?'50%':'2px';
+    el.style.animationDuration = (Math.random()*2+1.5)+'s';
+    el.style.animationDelay = (Math.random()*0.8)+'s';
+    document.body.appendChild(el);
+    setTimeout(()=>el.remove(),3500);
+  }
+}
+
+function showCheckAnimation(){
+  const overlay = document.createElement('div');
+  overlay.className = 'check-overlay';
+  overlay.innerHTML = '<div class="check-circle"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div>';
+  document.body.appendChild(overlay);
+  setTimeout(()=>{ overlay.remove(); fireConfetti(); },800);
+}
+
+const NOTIFY_THRESHOLDS = { responses: [10,25,50,100], satLow: 50 };
+
+function checkNotifications(){
+  const count = responses.length;
+  NOTIFY_THRESHOLDS.responses.forEach(t => { if(count===t) toast(count+' respuestas registradas!'); });
+  const sat = globalSatisfaction(responses);
+  if(sat!==null && sat<NOTIFY_THRESHOLDS.satLow) toast('Satisfaccion global por debajo del '+NOTIFY_THRESHOLDS.satLow+'%');
+}
+
+function loadResponseIntoWizard(r){
+  current = JSON.parse(JSON.stringify(r));
+  stepIndex = 0;
+  document.getElementById('mainTabs').querySelector('[data-tab="encuesta"]').click();
+  renderWizard();
+}
 function showLoading(msg){
   const overlay = document.getElementById('loadingOverlay');
   document.getElementById('loadingText').textContent = msg || 'Cargando...';
@@ -429,6 +502,13 @@ async function saveResponses(){
 }
 
 function newResponse(){
+  if(loadDraft()){
+    const keys = Object.keys(current);
+    if(keys.length>2 && (current.nombre||current.habitacion||Object.keys(current.ratings||{}).length>0)){
+      if(!confirm('Tiene un borrador sin enviar. ¿Quiere continuar?')){ clearDraft(); }
+      else { stepIndex = 0; renderWizard(); return; }
+    }
+  }
   current = {
     id: 'r'+Date.now()+Math.random().toString(36).slice(2,7),
     fecha: todayISO(),
@@ -438,6 +518,7 @@ function newResponse(){
     masGusto:'', menosGusto:'', sugerencias:'', comentarios:''
   };
   stepIndex = 0;
+  clearDraft();
 }
 newResponse();
 
@@ -568,19 +649,21 @@ function setupWizardDelegation(){
     const rateBtn = e.target.closest('.rate-btn');
     if(rateBtn){
       current.ratings[rateBtn.dataset.fkey] = parseInt(rateBtn.dataset.val);
+      saveDraft();
       renderWizard();
       return;
     }
     const choiceBtn = e.target.closest('.choice-btn');
     if(choiceBtn){
       current[choiceBtn.dataset.field] = parseInt(choiceBtn.dataset.val);
+      saveDraft();
       renderWizard();
     }
   });
 
   wizard.addEventListener('input', e => {
     const field = inputMap[e.target.id];
-    if(field) current[field] = e.target.value;
+    if(field){ current[field] = e.target.value; saveDraft(); }
   });
 }
 
@@ -612,6 +695,9 @@ async function submitSurvey(){
   const ok = await saveResponses();
   if(ok){
     pushResponseToSheet(current);
+    clearDraft();
+    showCheckAnimation();
+    checkNotifications();
     stepIndex = SECTIONS.length+2;
     renderWizard();
   }
@@ -741,15 +827,22 @@ function renderResumen(){
   const { from: curFrom, to: curTo } = getFilterDates();
   const filterHtml = `
     <div class="filter-bar">
-      <label style="font-size:.82rem;">Filtrar por fechas:</label>
-      <input type="date" id="filterDateFrom" onchange="setFilterDates(this.value,document.getElementById('filterDateTo').value);onDateChange()" value="${curFrom}" aria-label="Desde" style="flex:0 1 150px;min-width:0;">
+      <label style="font-size:.82rem;">Fechas:</label>
+      <input type="date" id="filterDateFrom" onchange="setFilterDates(this.value,document.getElementById('filterDateTo').value);onDateChange()" value="${curFrom}" aria-label="Desde" style="flex:0 1 140px;min-width:0;">
       <span style="color:var(--palm);align-self:center;">→</span>
-      <input type="date" id="filterDateTo" onchange="setFilterDates(document.getElementById('filterDateFrom').value,this.value);onDateChange()" value="${curTo}" aria-label="Hasta" style="flex:0 1 150px;min-width:0;">
+      <input type="date" id="filterDateTo" onchange="setFilterDates(document.getElementById('filterDateFrom').value,this.value);onDateChange()" value="${curTo}" aria-label="Hasta" style="flex:0 1 140px;min-width:0;">
+      <label style="font-size:.82rem;margin-left:8px;">Motivo:</label>
+      <select id="filterMotivoResumen" onchange="_filterMotivo=this.value;onDateChange()" style="flex:0 1 130px;min-width:0;padding:4px 6px;border:1px solid var(--palm-light);border-radius:6px;font-size:.82rem;">
+        <option value="">Todos</option>
+        <option value="1"${_filterMotivo==='1'?' selected':''}>Ocio</option>
+        <option value="2"${_filterMotivo==='2'?' selected':''}>Trabajo</option>
+        <option value="3"${_filterMotivo==='3'?' selected':''}>Otros</option>
+      </select>
     </div>`;
 
-  const week = responses.filter(r=>inRange(r.fecha,'week'));
-  const month = responses.filter(r=>inRange(r.fecha,'month'));
-  const filtered = responses.filter(r=>inRange(r.fecha));
+  const week = responses.filter(r=>inRange(r.fecha,'week') && (!_filterMotivo || r.motivo===parseInt(_filterMotivo)));
+  const month = responses.filter(r=>inRange(r.fecha,'month') && (!_filterMotivo || r.motivo===parseInt(_filterMotivo)));
+  const filtered = responses.filter(r=>inRange(r.fecha) && (!_filterMotivo || r.motivo===parseInt(_filterMotivo)));
   const satWeek = globalSatisfaction(week);
   const satMonth = globalSatisfaction(month);
   const satFiltered = globalSatisfaction(filtered);
@@ -770,7 +863,7 @@ function renderResumen(){
 
   el.innerHTML = `
     ${filterHtml}
-    <div class="kpi-grid">
+    <div class="kpi-grid kpi-compact">
       <div class="kpi"><div class="kval">${filtered.length}</div><div class="klbl">Respuestas (rango)</div></div>
       <div class="kpi"><div class="kval">${satFiltered??'—'}%</div><div class="klbl">Satisfacción (rango)</div></div>
       <div class="kpi"><div class="kval">${expWeek}%</div><div class="klbl">Expectativas cubiertas</div></div>
@@ -816,7 +909,19 @@ function renderResumen(){
         y1:{position:'left', beginAtZero:true, title:{display:true,text:'Respuestas'}},
         y2:{position:'right', min:0, max:100, grid:{drawOnChartArea:false}, title:{display:true,text:'% Satisfacción'}}
       },
-      plugins:{legend:{position:'bottom'}}
+      plugins:{
+        legend:{position:'bottom'},
+        tooltip:{
+          callbacks:{
+            label: function(ctx){
+              const ds = ctx.dataset;
+              if(ds.label==='Respuestas') return 'Respuestas: '+ctx.parsed.y;
+              if(ds.label==='Satisfacción %') return 'Satisfacción: '+ctx.parsed.y+'%';
+              return ctx.parsed.y;
+            }
+          }
+        }
+      }
     }
   });
 
@@ -965,13 +1070,22 @@ function computeWordFreq(responses){
   return Object.keys(wordFreq).map(w => ({ word: w, count: wordFreq[w] })).sort((a, b) => b.count - a.count).slice(0, 15);
 }
 
+let _filterMotivo = '';
+
 function buildAnalisisFilterHtml(){
   const { from: curFrom, to: curTo } = getFilterDates();
   let h = '<div class="filter-bar">';
-  h += '<label style="font-size:.82rem;">Filtrar por fechas:</label>';
-  h += '<input type="date" id="filterDateFromAnalisis" onchange="setFilterDates(this.value,document.getElementById(\'filterDateToAnalisis\').value);onDateChange()" value="' + curFrom + '" aria-label="Desde" style="flex:0 1 150px;min-width:0;">';
+  h += '<label style="font-size:.82rem;">Fechas:</label>';
+  h += '<input type="date" id="filterDateFromAnalisis" onchange="setFilterDates(this.value,document.getElementById(\'filterDateToAnalisis\').value);onDateChange()" value="' + curFrom + '" aria-label="Desde" style="flex:0 1 140px;min-width:0;">';
   h += '<span style="color:var(--palm);align-self:center;">→</span>';
-  h += '<input type="date" id="filterDateToAnalisis" onchange="setFilterDates(document.getElementById(\'filterDateFromAnalisis\').value,this.value);onDateChange()" value="' + curTo + '" aria-label="Hasta" style="flex:0 1 150px;min-width:0;">';
+  h += '<input type="date" id="filterDateToAnalisis" onchange="setFilterDates(document.getElementById(\'filterDateFromAnalisis\').value,this.value);onDateChange()" value="' + curTo + '" aria-label="Hasta" style="flex:0 1 140px;min-width:0;">';
+  h += '<label style="font-size:.82rem;margin-left:8px;">Motivo:</label>';
+  h += '<select id="filterMotivo" onchange="_filterMotivo=this.value;onDateChange()" style="flex:0 1 130px;min-width:0;padding:4px 6px;border:1px solid var(--palm-light);border-radius:6px;font-size:.82rem;">';
+  h += '<option value="">Todos</option>';
+  h += '<option value="1"' + (_filterMotivo==='1'?' selected':'') + '>Ocio</option>';
+  h += '<option value="2"' + (_filterMotivo==='2'?' selected':'') + '>Trabajo</option>';
+  h += '<option value="3"' + (_filterMotivo==='3'?' selected':'') + '>Otros</option>';
+  h += '</select>';
   return h + '</div>';
 }
 
@@ -1001,7 +1115,7 @@ function renderAnalisis(){
   }
 
   const filterHtml = buildAnalisisFilterHtml();
-  const filteredResponses = responses.filter(r => inRange(r.fecha));
+  const filteredResponses = responses.filter(r => inRange(r.fecha) && (!_filterMotivo || r.motivo===parseInt(_filterMotivo)));
   const data = computeAnalisisData(filteredResponses);
   const { sectionStats, sectionStatsByAvg, allRatings, allVals, globalAvg, globalSat, globalMedian, expectYes, expectTotal, returnYes, returnTotal, motiveCounts, byDate, dates, dailyAvgs, trend, byRoom, roomList, dayOfWeekStats } = data;
 
@@ -1017,7 +1131,7 @@ function renderAnalisis(){
   let elHtml = '';
   elHtml += filterHtml;
   elHtml += '<div class="panel-card"><h3>Análisis General</h3>';
-  elHtml += '<div class="kpi-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:0;">';
+  elHtml += '<div class="kpi-grid kpi-compact" style="grid-template-columns:repeat(2,1fr);margin-bottom:0;">';
   elHtml += '<div class="kpi"><div class="kval">'+filteredResponses.length+'</div><div class="klbl">Total respuestas</div></div>';
   elHtml += '<div class="kpi"><div class="kval">'+(globalSat!==null?globalSat+'%':'—')+'</div><div class="klbl">Satisfacción global</div></div>';
   elHtml += '<div class="kpi"><div class="kval">'+globalAvg.toFixed(2)+'</div><div class="klbl">Promedio (1-5)</div></div>';
@@ -1060,6 +1174,28 @@ function renderAnalisis(){
 
   elHtml += '<div class="panel-card"><h3>Distribución por Departamento</h3><div class="chart-wrap tall"><canvas id="chart_analisis_dist"></canvas></div></div>';
 
+  const sortedByAvg = sectionStatsByAvg;
+  let alertsHtml = '';
+  if(sortedByAvg.length>=2){
+    const worstDept = sortedByAvg[sortedByAvg.length-1];
+    const secondWorst = sortedByAvg[sortedByAvg.length-2];
+    if(worstDept && secondWorst && (secondWorst.satisfaction - worstDept.satisfaction) > 10){
+      alertsHtml += '<div style="background:var(--coral);color:#fff;padding:8px 12px;border-radius:8px;margin-bottom:8px;font-size:.85rem;">⚠️ <strong>'+worstDept.title+'</strong> ('+worstDept.satisfaction+'%) versus <strong>'+secondWorst.title+'</strong> ('+secondWorst.satisfaction+'%). Diferencia >10%. Requiere atención inmediata.</div>';
+    }
+    if(sortedByAvg[0] && sortedByAvg[0].satisfaction - worstDept.satisfaction > 10){
+      alertsHtml += '<div style="background:var(--gold);color:var(--ink);padding:8px 12px;border-radius:8px;margin-bottom:8px;font-size:.85rem;">🏆 <strong>'+sortedByAvg[0].title+'</strong> supera por más de 10% al departamento con menor rendimiento ('+worstDept.title+'). Buenas prácticas para replicar.</div>';
+    }
+  }
+  const lastYearData = yearOverYearComparison(filteredResponses);
+  if(lastYearData.lastYear && lastYearData.lastYear.current.sat!==null && lastYearData.lastYear.previous.sat!==null){
+    const diff = lastYearData.lastYear.current.sat - lastYearData.lastYear.previous.sat;
+    if(diff < -10){
+      alertsHtml += '<div style="background:var(--coral);color:#fff;padding:8px 12px;border-radius:8px;margin-bottom:8px;font-size:.85rem;">📉 Satisfacción global ha caído '+(diff*-1).toFixed(0)+' puntos vs año anterior. Revisar estrategia general.</div>';
+    }
+  }
+
+  elHtml += '<div class="panel-card"><h3>Alertas Automáticas</h3>'+ (alertsHtml||'<p style="color:var(--palm);font-size:.82rem;">No se detectaron caídas significativas (≥10%) entre departamentos.</p>') +'</div>';
+
   elHtml += '<div class="panel-card"><h3>Mapa de Calor — Promedio por Departamento/Pregunta</h3><div style="overflow-x:auto;">';
   elHtml += '<table class="data-table"><thead><tr><th>Departamento</th>';
   SECTIONS.forEach(s => { elHtml += '<th style="text-align:center;">'+s.icon+'</th>'; });
@@ -1101,6 +1237,18 @@ function renderAnalisis(){
   elHtml += '</tbody></table></div></div>';
 
   elHtml += '<div class="panel-card"><h3>Motivo de Viaje</h3><div class="chart-wrap"><canvas id="chart_analisis_motive"></canvas></div></div>';
+
+  elHtml += '<div class="panel-card"><h3>Comparativa Histórica (año anterior)</h3><div style="overflow-x:auto;">';
+  if(lastYearData.lastYear){
+    const lyd = lastYearData.lastYear;
+    elHtml += '<table class="data-table"><thead><tr><th>Métrica</th><th>Periodo actual</th><th>Mismo periodo año anterior</th><th>Variación</th></tr></thead><tbody>';
+    elHtml += '<tr><td><strong>Respuestas</strong></td><td>'+lyd.current.count+'</td><td>'+lyd.previous.count+'</td><td style="color:'+(lyd.current.count>=lyd.previous.count?'var(--palm)':'var(--coral)')+';">'+(lyd.current.count-lyd.previous.count>0?'+':'')+(lyd.current.count-lyd.previous.count)+'</td></tr>';
+    elHtml += '<tr><td><strong>Satisfacción Global</strong></td><td>'+lyd.current.sat+'%</td><td>'+lyd.previous.sat+'%</td><td style="color:'+(lyd.current.sat>=lyd.previous.sat?'var(--palm)':'var(--coral)')+';">'+(lyd.current.sat-lyd.previous.sat>0?'+':'')+(lyd.current.sat-lyd.previous.sat).toFixed(1)+' pp</td></tr>';
+    elHtml += '<tr><td><strong>Promedio</strong></td><td>'+lyd.current.avg.toFixed(2)+'</td><td>'+lyd.previous.avg.toFixed(2)+'</td><td style="color:'+(lyd.current.avg>=lyd.previous.avg?'var(--palm)':'var(--coral)')+';">'+(lyd.current.avg-lyd.previous.avg>0?'+':'')+(lyd.current.avg-lyd.previous.avg).toFixed(2)+'</td></tr>';
+    elHtml += '</tbody></table></div></div>';
+  } else {
+    elHtml += '<p style="color:var(--palm);font-size:.82rem;">No hay datos del año anterior para comparar. Se necesitan respuestas con fechas del mismo periodo en el año previo.</p></div>';
+  }
 
   elHtml += '<div class="panel-card"><h3>Huéspedes Más Frecuentes</h3><div style="overflow-x:auto;">';
   elHtml += '<table class="data-table"><thead><tr><th>Habitación</th><th>Visitas</th><th>Promedio</th><th>Satisfacción</th></tr></thead><tbody>';
@@ -1339,7 +1487,14 @@ function renderAnalisis(){
     options:{
       responsive:true, maintainAspectRatio:false,
       scales:{y:{min:1,max:5,title:{display:true,text:'Promedio (1-5)'}}},
-      plugins:{legend:{position:'bottom'}}
+      plugins:{
+        legend:{position:'bottom'},
+        tooltip:{
+          callbacks:{
+            label: function(ctx){ return 'Promedio: '+ctx.parsed.y.toFixed(2)+'/5'; }
+          }
+        }
+      }
     }
   });
 
@@ -1417,9 +1572,11 @@ function renderDatos(){
     <div class="toolbar">
       <button class="btn btn-primary btn-small" onclick="exportExcel()">⬇ Exportar a Excel</button>
       <button class="btn btn-ghost btn-small" onclick="exportJSONBackup()">⬇ Exportar respaldo (.json)</button>
+      <button class="btn btn-ghost btn-small" onclick="exportFullReport()">📄 Exportar informe completo</button>
+      <button class="btn btn-ghost btn-small" onclick="window.print()">🖨️ Imprimir / PDF</button>
       <button class="btn btn-ghost btn-small" onclick="document.getElementById('importExcelInput').click()">⬆ Importar Excel</button>
       <button class="btn btn-ghost btn-small" onclick="document.getElementById('importJsonInput').click()">⬆ Importar respaldo (.json)</button>
-      <button class="btn btn-ghost btn-small" onclick="clearAll()">Borrar todas las respuestas</button>
+      <button class="btn btn-ghost btn-small" onclick="clearAll()">🗑️ Borrar todas</button>
       <input type="file" id="importExcelInput" accept=".xlsx,.xls" style="display:none" onchange="handleImportExcel(this.files[0]); this.value='';">
       <input type="file" id="importJsonInput" accept=".json" style="display:none" onchange="handleImportJSON(this.files[0]); this.value='';">
     </div>
@@ -1437,7 +1594,10 @@ function renderDatos(){
       <td>${escapeHtml(r.habitacion)}</td>
       <td>${r.expectativas===1?'Sí':r.expectativas===2?'No':'—'}</td>
       <td>${r.volveria===1?'Sí':r.volveria===2?'No':'—'}</td>
-      <td><button class="btn btn-small btn-ghost" onclick="deleteResponse('${r.id}')" aria-label="Eliminar respuesta">Eliminar</button></td>
+      <td>
+        <button class="btn btn-small btn-ghost" onclick="editResponse('${r.id}')" aria-label="Editar respuesta" style="margin-right:4px;">✏️</button>
+        <button class="btn btn-small btn-ghost" onclick="deleteResponse('${r.id}')" aria-label="Eliminar respuesta">🗑️</button>
+      </td>
     </tr>`).join('');
 
   el.innerHTML = `
@@ -1558,12 +1718,20 @@ async function handleImportExcel(file){
   try{
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, {type:'array', cellDates:true});
-    const sheetName = wb.SheetNames.includes('Datos') ? 'Datos' : wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''});
 
     const flatQ = [];
     SECTIONS.forEach(s=>s.questions.forEach(q=>flatQ.push({sec:s,q})));
+
+    // Try each sheet to find one that has the expected code column
+    let sheetName = '', ws = null, rows = [];
+    const codeToFind = flatQ[0]?.q?.code;
+    for(const sn of wb.SheetNames){
+      const candidate = wb.Sheets[sn];
+      const testRows = XLSX.utils.sheet_to_json(candidate, {header:1, raw:true, defval:''});
+      const hasCode = testRows.some(r => r.some(c => String(c).trim()===codeToFind));
+      if(hasCode || sn==='Datos'){ sheetName = sn; ws = candidate; rows = testRows; break; }
+    }
+    if(!ws){ sheetName = wb.SheetNames[0]; ws = wb.Sheets[sheetName]; rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''}); }
 
     let codeRow = -1, ratingStart = -1;
     for(let r=0; r<Math.min(rows.length,6); r++){
@@ -1626,10 +1794,14 @@ async function handleImportExcel(file){
     }
 
     const existingIds = new Set(responses.map(r=>r.id));
-    let added = 0;
+    let added = 0, skippedEmpty = 0, skippedDuplicate = 0;
     for(let r=codeRow+1; r<rows.length; r++){
       const row = rows[r];
-      if(!row || row.every(c=>c==='' || c===undefined || c===null)) continue;
+      if(!row || row.every(c=>c==='' || c===undefined || c===null)){ skippedEmpty++; continue; }
+      // Skip if row has no rating data at all
+      let hasRating = false;
+      flatQ.forEach((x,i) => { if(toRating(row[ratingStart+i])) hasRating = true; });
+      if(!hasRating){ skippedEmpty++; continue; }
       const ratings = {};
       flatQ.forEach((x,i)=>{
         const val = toRating(row[ratingStart+i]);
@@ -1652,15 +1824,16 @@ async function handleImportExcel(file){
         sugerencias: colSugerencias>-1 ? String(row[colSugerencias]||'') : '',
         comentarios: colComentarios>-1 ? String(row[colComentarios]||'') : ''
       };
-      if(existingIds.has(rec.id)) continue;
+      if(existingIds.has(rec.id)){ skippedDuplicate++; continue; }
       existingIds.add(rec.id);
       responses.push(rec);
       added++;
     }
-    if(added===0){ toast('No se encontraron filas de datos para importar'); return; }
+    if(added===0){ toast('No se encontraron filas de datos para importar. Revisa que la hoja tenga filas con calificaciones (1-5) en las columnas correctas.'); return; }
     await saveResponses();
     renderDatos();
-    toast(`${added} respuesta(s) importada(s) del Excel`);
+    const rangeInfo = ws['!ref'] || 'desconocido';
+    toast(`${added} respuesta(s) importada(s) de ${rows.length-codeRow-1} filas procesadas (${skippedEmpty} vacias/sin rating, ${skippedDuplicate} duplicadas). Hoja: "${sheetName}" - Rango: ${rangeInfo}`);
   }catch(e){
     toast('No se pudo leer el Excel: ' + e.message);
   }
@@ -1740,6 +1913,61 @@ async function pullFromSheet(){
     hideLoading();
     toast('No se pudo conectar con Google Sheets. Revisa la URL y los permisos.');
   }
+}
+
+function yearOverYearComparison(filteredResponses){
+  if(!filteredResponses.length) return { lastYear: null };
+  const dates = filteredResponses.map(r => new Date(r.fecha)).filter(d => !isNaN(d));
+  if(!dates.length) return { lastYear: null };
+  const minDate = new Date(Math.min(...dates));
+  const maxDate = new Date(Math.max(...dates));
+  const prevMin = new Date(minDate); prevMin.setFullYear(prevMin.getFullYear()-1);
+  const prevMax = new Date(maxDate); prevMax.setFullYear(prevMax.getFullYear()-1);
+  const prevYearRes = responses.filter(r => {
+    const d = new Date(r.fecha);
+    return d >= prevMin && d <= prevMax;
+  });
+  if(!prevYearRes.length) return { lastYear: null };
+
+  function calcStats(list){
+    const vals = [];
+    list.forEach(r => Object.values(r.ratings||{}).forEach(v => { if(v) vals.push(v); }));
+    const avg = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+    return { count: list.length, avg, sat: pctFromAvg(avg) };
+  }
+
+  return {
+    lastYear: {
+      current: calcStats(filteredResponses),
+      previous: calcStats(prevYearRes)
+    }
+  };
+}
+
+function exportFullReport(){
+  const txt = responses.map(r => {
+    const ratingsStr = Object.entries(r.ratings).map(([k,v])=>`${k}:${v}`).join(', ');
+    return `ID:${r.id} | Fecha:${r.fecha} | Nombre:${r.nombre} ${r.apellidos} | Hab:${r.habitacion} | Email:${r.email} | Ratings:{${ratingsStr}} | Expectativas:${r.expectativas===1?'Sí':r.expectativas===2?'No':'—'} | Volvería:${r.volveria===1?'Sí':r.volveria===2?'No':'—'} | Motivo:${r.motivo===1?'Ocio':r.motivo===2?'Trabajo':r.motivo===3?'Otros':'—'} | +:${r.masGusto} | -:${r.menosGusto} | Sug:${r.sugerencias} | Coment:${r.comentarios}`;
+  }).join('\n');
+  const blob = new Blob([txt], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'informe-completo-hesperia-'+todayISO()+'.txt';
+  a.click();
+  toast('Informe completo exportado');
+}
+
+function editResponse(id){
+  const r = responses.find(x => x.id === id);
+  if(!r) return;
+  if(!confirm('¿Editar esta respuesta? Se cargará en el formulario y podrá modificarla.')) return;
+  loadResponseIntoWizard(r);
+  document.getElementById('mainTabs').querySelector('[data-tab="encuesta"]').click();
+  toast('Respuesta cargada para editar. Al reenviar se añadirá como nueva.');
+}
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
 }
 
 (async function init(){
