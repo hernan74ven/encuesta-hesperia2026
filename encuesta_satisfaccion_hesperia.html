@@ -1575,9 +1575,11 @@ function renderDatos(){
       <button class="btn btn-ghost btn-small" onclick="exportFullReport()">📄 Exportar informe completo</button>
       <button class="btn btn-ghost btn-small" onclick="window.print()">🖨️ Imprimir / PDF</button>
       <button class="btn btn-ghost btn-small" onclick="document.getElementById('importExcelInput').click()">⬆ Importar Excel</button>
+      <button class="btn btn-ghost btn-small" onclick="document.getElementById('importCsvInput').click()">⬆ Importar CSV</button>
       <button class="btn btn-ghost btn-small" onclick="document.getElementById('importJsonInput').click()">⬆ Importar respaldo (.json)</button>
       <button class="btn btn-ghost btn-small" onclick="clearAll()">🗑️ Borrar todas</button>
       <input type="file" id="importExcelInput" accept=".xlsx,.xls" style="display:none" onchange="handleImportExcel(this.files[0]); this.value='';">
+      <input type="file" id="importCsvInput" accept=".csv,.tsv,.txt" style="display:none" onchange="handleImportCSV(this.files[0]); this.value='';">
       <input type="file" id="importJsonInput" accept=".json" style="display:none" onchange="handleImportJSON(this.files[0]); this.value='';">
     </div>
     <p style="font-size:.75rem;color:var(--palm);margin:-6px 0 16px;">Importar <strong>añade</strong> respuestas a las existentes (no reemplaza). Si quieres empezar de cero, borra todo primero.</p>
@@ -1722,7 +1724,6 @@ async function handleImportExcel(file){
     const flatQ = [];
     SECTIONS.forEach(s=>s.questions.forEach(q=>flatQ.push({sec:s,q})));
 
-    // Try each sheet to find one that has the expected code column
     let sheetName = '', ws = null, rows = [];
     const codeToFind = flatQ[0]?.q?.code;
     for(const sn of wb.SheetNames){
@@ -1733,111 +1734,138 @@ async function handleImportExcel(file){
     }
     if(!ws){ sheetName = wb.SheetNames[0]; ws = wb.Sheets[sheetName]; rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:''}); }
 
-    let codeRow = -1, ratingStart = -1;
-    for(let r=0; r<Math.min(rows.length,6); r++){
-      const idx = rows[r].findIndex(c=>String(c).trim()===flatQ[0].q.code);
-      if(idx>-1){ codeRow = r; ratingStart = idx; break; }
-    }
-    if(codeRow===-1) throw new Error('no se encontró la fila de códigos (VG, AP, Es...)');
-
-    const headerRows = rows.slice(0, codeRow+1);
-    const numCols = Math.max(...rows.map(r=>r.length));
-    const headerText = [];
-    for(let c=0;c<numCols;c++){
-      headerText[c] = headerRows.map(r=>normalizeHeader(r[c])).join(' ');
-    }
-    function findCol(pred, excludeCols){
-      for(let c=0;c<numCols;c++){
-        if(excludeCols && excludeCols.has(c)) continue;
-        if(pred(headerText[c])) return c;
-      }
-      return -1;
-    }
-    const ratingCols = new Set();
-    for(let i=0;i<flatQ.length;i++) ratingCols.add(ratingStart+i);
-
-    const colNombre = findCol(h=>h.includes('nombre') && !h.includes('apellid'), ratingCols);
-    const colApellidos = findCol(h=>h.includes('apellid'), ratingCols);
-    const colFecha = findCol(h=>h.includes('fecha'), ratingCols);
-    const colHab = findCol(h=>h.includes('hab'), ratingCols);
-    const colEmail = findCol(h=>h.includes('mail'), ratingCols);
-    const colExpect = findCol(h=>h.includes('expectativ'), ratingCols);
-    const colVolver = findCol(h=>h.includes('volver'), ratingCols);
-    const colMotivo = findCol(h=>h.includes('motivo') && !h.includes('especific'), ratingCols);
-    const colEspecificar = findCol(h=>h.includes('especific'), ratingCols);
-    const colMas = findCol(h=>h.includes('gustado') && !h.includes('menos'), ratingCols);
-    const colMenos = findCol(h=>h.includes('menos'), ratingCols);
-    const colSugerencias = findCol(h=>h.includes('sugerenc'), ratingCols);
-    const colComentarios = findCol(h=>h.includes('coment'), ratingCols);
-
-    function toRating(v){ const n=parseInt(v); return (n>=1&&n<=5)? n : null; }
-    function toYesNo(v){
-      const s = normalizeHeader(v);
-      if(s==='1'||s==='si'||s==='sí') return 1;
-      if(s==='2'||s==='no') return 2;
-      return null;
-    }
-    function toMotivo(v){
-      const s = normalizeHeader(v);
-      if(s==='1'||s.includes('ocio')) return 1;
-      if(s==='2'||s.includes('trabajo')) return 2;
-      if(s==='3'||s.includes('otro')) return 3;
-      return null;
-    }
-    function dateToISO(v){
-      if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
-      if(typeof v==='string' && v.trim()){
-        const d = new Date(v);
-        if(!isNaN(d)) return d.toISOString().slice(0,10);
-      }
-      return todayISO();
-    }
-
-    const existingIds = new Set(responses.map(r=>r.id));
-    let added = 0, skippedEmpty = 0, skippedDuplicate = 0;
-    for(let r=codeRow+1; r<rows.length; r++){
-      const row = rows[r];
-      if(!row || row.every(c=>c==='' || c===undefined || c===null)){ skippedEmpty++; continue; }
-      // Skip if row has no rating data at all
-      let hasRating = false;
-      flatQ.forEach((x,i) => { if(toRating(row[ratingStart+i])) hasRating = true; });
-      if(!hasRating){ skippedEmpty++; continue; }
-      const ratings = {};
-      flatQ.forEach((x,i)=>{
-        const val = toRating(row[ratingStart+i]);
-        if(val) ratings[x.sec.key+'_'+x.q.code] = val;
-      });
-      const rec = {
-        id: 'imp'+Date.now()+Math.random().toString(36).slice(2,7)+'_'+r,
-        fecha: colFecha>-1 ? dateToISO(row[colFecha]) : todayISO(),
-        nombre: colNombre>-1 ? String(row[colNombre]||'') : '',
-        apellidos: colApellidos>-1 ? String(row[colApellidos]||'') : '',
-        habitacion: colHab>-1 ? String(row[colHab]||'') : '',
-        email: colEmail>-1 ? String(row[colEmail]||'') : '',
-        ratings,
-        expectativas: colExpect>-1 ? toYesNo(row[colExpect]) : null,
-        volveria: colVolver>-1 ? toYesNo(row[colVolver]) : null,
-        motivo: colMotivo>-1 ? toMotivo(row[colMotivo]) : null,
-        motivoOtro: colEspecificar>-1 ? String(row[colEspecificar]||'') : '',
-        masGusto: colMas>-1 ? String(row[colMas]||'') : '',
-        menosGusto: colMenos>-1 ? String(row[colMenos]||'') : '',
-        sugerencias: colSugerencias>-1 ? String(row[colSugerencias]||'') : '',
-        comentarios: colComentarios>-1 ? String(row[colComentarios]||'') : ''
-      };
-      if(existingIds.has(rec.id)){ skippedDuplicate++; continue; }
-      existingIds.add(rec.id);
-      responses.push(rec);
-      added++;
-    }
-    if(added===0){ toast('No se encontraron filas de datos para importar. Revisa que la hoja tenga filas con calificaciones (1-5) en las columnas correctas.'); return; }
+    const added = processImportRows(rows);
+    if(added===0) return;
     await saveResponses();
     renderDatos();
-    const rangeInfo = ws['!ref'] || 'desconocido';
-    const msg = `Importadas: ${added}\nFilas en Excel: ${rows.length}\nFilas de datos (tras cabeceras): ${rows.length-codeRow-1}\nVacias/sin rating: ${skippedEmpty}\nDuplicadas: ${skippedDuplicate}\nHoja: "${sheetName}"\nRango: ${rangeInfo}`;
-    alert(msg);
+    alert(`Importadas: ${added} desde Excel\nHoja: "${sheetName}"`);
   }catch(e){
     toast('No se pudo leer el Excel: ' + e.message);
   }
+}
+
+async function handleImportCSV(file){
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    const sep = lines[0].includes(';') ? ';' : ',';
+    const rows = lines.map(l => l.split(sep));
+    const added = processImportRows(rows);
+    if(added===0) return;
+    await saveResponses();
+    renderDatos();
+    alert(`Importadas: ${added} desde CSV\nFilas: ${rows.length}`);
+  }catch(e){
+    toast('No se pudo leer el CSV: ' + e.message);
+  }
+}
+
+function processImportRows(rows){
+  const flatQ = [];
+  SECTIONS.forEach(s=>s.questions.forEach(q=>flatQ.push({sec:s,q})));
+
+  let codeRow = -1, ratingStart = -1;
+  for(let r=0; r<Math.min(rows.length,10); r++){
+    const row = rows[r];
+    if(!row) continue;
+    const idx = row.findIndex(c => String(c).trim() === flatQ[0].q.code);
+    if(idx>-1){ codeRow = r; ratingStart = idx; break; }
+  }
+  if(codeRow===-1){ toast('No se encontró la fila de códigos (VG, AP, Es...)'); return 0; }
+
+  const headerRows = rows.slice(0, codeRow+1);
+  const numCols = Math.max(...rows.map(r=>r.length));
+  const headerText = [];
+  for(let c=0;c<numCols;c++){
+    headerText[c] = headerRows.map(r=>normalizeHeader(r[c])).join(' ');
+  }
+  function findCol(pred, excludeCols){
+    for(let c=0;c<numCols;c++){
+      if(excludeCols && excludeCols.has(c)) continue;
+      if(pred(headerText[c])) return c;
+    }
+    return -1;
+  }
+  const ratingCols = new Set();
+  for(let i=0;i<flatQ.length;i++) ratingCols.add(ratingStart+i);
+
+  const colNombre = findCol(h=>h.includes('nombre') && !h.includes('apellid'), ratingCols);
+  const colApellidos = findCol(h=>h.includes('apellid'), ratingCols);
+  const colFecha = findCol(h=>h.includes('fecha'), ratingCols);
+  const colHab = findCol(h=>h.includes('hab'), ratingCols);
+  const colEmail = findCol(h=>h.includes('mail'), ratingCols);
+  const colExpect = findCol(h=>h.includes('expectativ'), ratingCols);
+  const colVolver = findCol(h=>h.includes('volver'), ratingCols);
+  const colMotivo = findCol(h=>h.includes('motivo') && !h.includes('especific'), ratingCols);
+  const colEspecificar = findCol(h=>h.includes('especific'), ratingCols);
+  const colMas = findCol(h=>h.includes('gustado') && !h.includes('menos'), ratingCols);
+  const colMenos = findCol(h=>h.includes('menos'), ratingCols);
+  const colSugerencias = findCol(h=>h.includes('sugerenc'), ratingCols);
+  const colComentarios = findCol(h=>h.includes('coment'), ratingCols);
+
+  function toRating(v){ const n=parseInt(v); return (n>=1&&n<=5)? n : null; }
+  function toYesNo(v){
+    const s = normalizeHeader(v);
+    if(s==='1'||s==='si'||s==='sí') return 1;
+    if(s==='2'||s==='no') return 2;
+    return null;
+  }
+  function toMotivo(v){
+    const s = normalizeHeader(v);
+    if(s==='1'||s.includes('ocio')) return 1;
+    if(s==='2'||s.includes('trabajo')) return 2;
+    if(s==='3'||s.includes('otro')) return 3;
+    return null;
+  }
+  function dateToISO(v){
+    if(v instanceof Date && !isNaN(v)) return v.toISOString().slice(0,10);
+    if(typeof v==='string' && v.trim()){
+      const d = new Date(v);
+      if(!isNaN(d)) return d.toISOString().slice(0,10);
+    }
+    return todayISO();
+  }
+
+  const existingIds = new Set(responses.map(r=>r.id));
+  let added = 0, skippedEmpty = 0, skippedDuplicate = 0;
+  for(let r=codeRow+1; r<rows.length; r++){
+    const row = rows[r];
+    if(!row || row.every(c=>c==='' || c===undefined || c===null)){ skippedEmpty++; continue; }
+    let hasRating = false;
+    flatQ.forEach((x,i) => { if(toRating(row[ratingStart+i])) hasRating = true; });
+    if(!hasRating){ skippedEmpty++; continue; }
+    const ratings = {};
+    flatQ.forEach((x,i)=>{
+      const val = toRating(row[ratingStart+i]);
+      if(val) ratings[x.sec.key+'_'+x.q.code] = val;
+    });
+    const rec = {
+      id: 'imp'+Date.now()+Math.random().toString(36).slice(2,7)+'_'+r,
+      fecha: colFecha>-1 ? dateToISO(row[colFecha]) : todayISO(),
+      nombre: colNombre>-1 ? String(row[colNombre]||'') : '',
+      apellidos: colApellidos>-1 ? String(row[colApellidos]||'') : '',
+      habitacion: colHab>-1 ? String(row[colHab]||'') : '',
+      email: colEmail>-1 ? String(row[colEmail]||'') : '',
+      ratings,
+      expectativas: colExpect>-1 ? toYesNo(row[colExpect]) : null,
+      volveria: colVolver>-1 ? toYesNo(row[colVolver]) : null,
+      motivo: colMotivo>-1 ? toMotivo(row[colMotivo]) : null,
+      motivoOtro: colEspecificar>-1 ? String(row[colEspecificar]||'') : '',
+      masGusto: colMas>-1 ? String(row[colMas]||'') : '',
+      menosGusto: colMenos>-1 ? String(row[colMenos]||'') : '',
+      sugerencias: colSugerencias>-1 ? String(row[colSugerencias]||'') : '',
+      comentarios: colComentarios>-1 ? String(row[colComentarios]||'') : ''
+    };
+    if(existingIds.has(rec.id)){ skippedDuplicate++; continue; }
+    existingIds.add(rec.id);
+    responses.push(rec);
+    added++;
+  }
+  if(added===0){ toast('No se encontraron filas de datos. Revisa que el archivo tenga calificaciones (1-5) en las columnas correctas.'); return 0; }
+  if(skippedEmpty>0) toast(`${added} importadas (${skippedEmpty} filas vacias/sin rating omitidas)`);
+  else toast(`${added} respuesta(s) importada(s)`);
+  return added;
 }
 
 function saveSheetsUrlFromInput(){
