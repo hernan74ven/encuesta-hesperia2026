@@ -1099,8 +1099,8 @@ function buildRecommendations(data, topCorr){
   if(globalSat < 60) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Atencion general</strong> — La satisfaccion global esta por debajo del 60%. Se recomienda una revision integral de todos los departamentos y procesos del hotel.</li>');
   if(returnYes && returnTotal && pct(returnYes, returnTotal) < 70) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--gold);">Retencion de clientes</strong> — Solo el ' + pct(returnYes, returnTotal) + '% volveria. Implementar programa de fidelizacion, ofertas especiales para huespedes recurrentes y encuestas de seguimiento post-estancia.</li>');
   if(topCorr.length && topCorr[0].corr > 0.5) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--sea);">Correlacion fuerte</strong> — "' + topCorr[0].q1.q.es + '" y "' + topCorr[0].q2.q.es + '" estan correlacionados (r=' + topCorr[0].corr.toFixed(2) + '). Mejorar uno impacta directamente al otro.</li>');
-  if(globalAvg > 3.5) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--palm);">Excelente desempeno</strong> — La satisfaccion promedio (' + globalAvg.toFixed(2) + '/5) indica un alto nivel de calidad. Continuar con la estrategia actual.</li>');
-  else if(globalAvg < 2.5) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Desempeno critico</strong> — La satisfaccion promedio (' + globalAvg.toFixed(2) + '/5) es alarmantemente baja. Se requiere intervencion inmediata en todos los departamentos.</li>');
+  if(globalAvg < 2.0) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--palm);">Excelente desempeno</strong> — La satisfaccion promedio (' + globalAvg.toFixed(2) + '/5) indica un alto nivel de calidad. Continuar con la estrategia actual.</li>');
+  else if(globalAvg > 4.0) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Desempeno critico</strong> — La satisfaccion promedio (' + globalAvg.toFixed(2) + '/5) es alarmantemente baja. Se requiere intervencion inmediata en todos los departamentos.</li>');
   const expectPct = expectTotal ? pct(expectYes, expectTotal) : 0;
   if(expectPct > 0 && expectPct < 50) r.push('<li style="margin-bottom:8px;"><strong style="color:var(--coral);">Expectativas no cumplidas</strong> — Solo el ' + expectPct + '% de huespedes considera que sus expectativas fueron cubiertas. Revisar promesas de marketing vs realidad del servicio.</li>');
   return r;
@@ -1248,10 +1248,11 @@ function buildDeptAnalysis(filteredResponses, sectionStatsByAvg){
     }
 
     const recommendations = [];
-    if(stats.avg <= 2.5) recommendations.push({text:'Capacitación intensiva en atención al cliente. Revisar procesos y estándares del departamento.', priority:'Alta'});
-    if(stats.avg <= 3 && stats.avg > 2.5) recommendations.push({text:'Mejorar consistencia del servicio. Establecer protocolos y checklist de calidad.', priority:'Media'});
-    if(stats.avg > 3.5) recommendations.push({text:'Mantener excelencia. Considerar programa de reconocimiento al personal.', priority:'Baja'});
-    if(stats.stdDev > 1.2) recommendations.push({text:'Alta variabilidad: capacitar personal inconsistente y estandarizar procesos.', priority:'Alta'});
+    if(stats.avg <= 2.0) recommendations.push({text:'Excelente desempeño. Mantener estándares actuales y reconocer al personal.', priority:'Baja'});
+    else if(stats.avg <= 3.0) recommendations.push({text:'Desempeño aceptable. Establecer protocolos y checklist de calidad para mejorar.', priority:'Media'});
+    else if(stats.avg <= 4.0) recommendations.push({text:'Desempeño mejorable. Capacitar al personal y revisar procesos del departamento.', priority:'Alta'});
+    else recommendations.push({text:'Desempeño crítico. Intervención inmediata: capacitación intensiva y revisión de estándares.', priority:'Alta'});
+    if(stats.stdDev > 1.2) recommendations.push({text:'Alta variabilidad en respuestas. Estandarizar procesos y capacitar personal inconsistente.', priority:'Alta'});
     if(sortedSpecificNeg.length > 0){
       const topNeg = sortedSpecificNeg[0][0];
       if(topNeg.includes('comida') || topNeg.includes('buffet')) recommendations.push({text:'Revisar calidad y variedad gastronómica. Implementar controles de calidad.', priority:'Alta'});
@@ -1263,7 +1264,6 @@ function buildDeptAnalysis(filteredResponses, sectionStatsByAvg){
       if(topNeg.includes('toldos') || topNeg.includes('tumbonas')) recommendations.push({text:'Incrementar dotación de toldos, tumbonas y sillas en áreas de descanso.', priority:'Media'});
       if(topNeg.includes('agua caliente') || topNeg.includes('fria')) recommendations.push({text:'Revisar sistema de agua caliente. Priorizar reparación de calentadores.', priority:'Alta'});
     }
-    if(recommendations.length === 0) recommendations.push({text:'Departamento con buen desempeño. Mantener estándares actuales.', priority:'Baja'});
 
     html += '<div style="margin-bottom:8px;"><div style="font-size:.78rem;font-weight:600;color:var(--sea-deep);margin-bottom:6px;">📋 Recomendaciones:</div><ul style="margin:0;padding-left:18px;font-size:.8rem;color:var(--ink);line-height:1.5;">';
     recommendations.forEach(a => {
