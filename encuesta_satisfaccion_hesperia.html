@@ -1833,7 +1833,8 @@ async function handleImportExcel(file){
     await saveResponses();
     renderDatos();
     const rangeInfo = ws['!ref'] || 'desconocido';
-    toast(`${added} respuesta(s) importada(s) de ${rows.length-codeRow-1} filas procesadas (${skippedEmpty} vacias/sin rating, ${skippedDuplicate} duplicadas). Hoja: "${sheetName}" - Rango: ${rangeInfo}`);
+    const msg = `Importadas: ${added}\nFilas en Excel: ${rows.length}\nFilas de datos (tras cabeceras): ${rows.length-codeRow-1}\nVacias/sin rating: ${skippedEmpty}\nDuplicadas: ${skippedDuplicate}\nHoja: "${sheetName}"\nRango: ${rangeInfo}`;
+    alert(msg);
   }catch(e){
     toast('No se pudo leer el Excel: ' + e.message);
   }
