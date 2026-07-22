@@ -249,6 +249,14 @@ table.data-table tr:nth-child(even){background:var(--sand-light);}
   .kpi-grid.kpi-compact .kpi{padding:8px;}
   .kpi-grid.kpi-compact .kpi .kval{font-size:.95rem;}
 }
+.chart-modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,54,52,0.85);z-index:300;display:flex;align-items:center;justify-content:center;animation:fadein .2s ease;}
+.chart-modal{background:#fff;border-radius:16px;padding:24px;max-width:500px;width:90%;max-height:85vh;position:relative;box-shadow:0 8px 32px rgba(0,0,0,0.3);}
+.chart-modal-close{position:absolute;top:10px;right:14px;background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--ink);padding:4px 8px;border-radius:6px;}
+.chart-modal-close:hover{background:var(--sand-light);}
+.chart-modal h3{margin:0 0 12px;font-family:Fraunces,serif;color:var(--sea-deep);font-size:1.1rem;padding-right:30px;}
+.chart-modal canvas{max-height:70vh;}
+.chart-wrap{cursor:pointer;transition:transform .15s ease;}
+.chart-wrap:hover{transform:scale(1.02);}
 @media print{
   .top,.subnav,.tabs,.filter-bar,.btn,.toolbar,.pin-gate{display:none!important;}
   .panel-card{break-inside:avoid;box-shadow:none;border:1px solid #ddd;}
@@ -1635,6 +1643,48 @@ function renderAnalisis(){
   });
 }
 
+let modalChart = null;
+
+function openChartModal(canvasId, title){
+  const existing = document.getElementById('chartModalOverlay');
+  if(existing) existing.remove();
+  if(modalChart){ modalChart.destroy(); modalChart = null; }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'chart-modal-overlay';
+  overlay.id = 'chartModalOverlay';
+  overlay.innerHTML = '<div class="chart-modal"><button class="chart-modal-close" onclick="closeChartModal()">&times;</button><h3>'+title+'</h3><canvas id="chartModalCanvas"></canvas></div>';
+  overlay.addEventListener('click', e => { if(e.target === overlay) closeChartModal(); });
+  document.body.appendChild(overlay);
+
+  const srcChart = charts[canvasId];
+  if(!srcChart) return;
+
+  modalChart = new Chart(document.getElementById('chartModalCanvas'), {
+    type:'doughnut',
+    data: JSON.parse(JSON.stringify(srcChart.data)),
+    options:{ responsive:true, maintainAspectRatio:true, cutout:'40%',
+      plugins:{legend:{position:'right',labels:{boxWidth:14,padding:10,font:{size:13}}},
+        tooltip:{callbacks:{
+          title:(c)=>RATE_LABELS[parseInt(c[0].label)]||c[0].label,
+          label:(c)=>{
+            const total = c.dataset.data.reduce((a,b)=>a+b,0);
+            return c.raw+' respuesta(s) ('+(total?Math.round(c.raw/total*100):0)+'%)';
+          }
+        }}
+      }
+    }
+  });
+}
+
+function closeChartModal(){
+  const overlay = document.getElementById('chartModalOverlay');
+  if(overlay) overlay.remove();
+  if(modalChart){ modalChart.destroy(); modalChart = null; }
+}
+
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeChartModal(); });
+
 function renderGraficos(){
   destroyCharts('q_');
   const el = document.getElementById('sub-graficos');
@@ -1662,7 +1712,9 @@ function renderGraficos(){
       const fkey = sec.key+'_'+q.code;
       const counts = [1,2,3,4,5].map(v=>responses.filter(r=>r.ratings[fkey]===v).length);
       const total = counts.reduce((a,b)=>a+b,0);
-      charts['q_'+fkey] = new Chart(document.getElementById('chart_'+fkey), {
+      const chartKey = 'q_'+fkey;
+      const canvas = document.getElementById('chart_'+fkey);
+      charts[chartKey] = new Chart(canvas, {
         type:'doughnut',
         data:{ labels:['1','2','3','4','5'], datasets:[{
           data:counts,
@@ -1676,6 +1728,9 @@ function renderGraficos(){
             label:(c)=>`${c.raw} respuesta(s) (${total?Math.round(c.raw/total*100):0}%)`
           }}}
         }
+      });
+      canvas.parentElement.addEventListener('click', function(){
+        openChartModal(chartKey, sec.icon+' '+sec.title+' — '+q.es);
       });
     });
   });
