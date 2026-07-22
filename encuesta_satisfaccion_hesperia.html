@@ -1106,6 +1106,43 @@ function buildRecommendations(data, topCorr){
   return r;
 }
 
+function buildRecommendationsCard(recs, filteredResponses, allVals, dates, sectionStatsByAvg){
+  let html = '<div class="panel-card"><h3>📋 Plan de Acción General</h3>';
+  html += '<div style="font-size:.82rem;color:var(--palm);margin:-8px 0 14px;">Basado en <strong>'+filteredResponses.length+'</strong> respuestas ('+allVals.length+' calificaciones en '+dates.length+' días).</div>';
+
+  const sorted = sectionStatsByAvg.slice();
+  const best = sorted[0];
+  const worst = sorted[sorted.length-1];
+  const critical = sorted.filter(s => s.satisfaction < 50);
+  const excellent = sorted.filter(s => s.satisfaction >= 70);
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">';
+  html += '<div style="background:var(--coral);color:#fff;border-radius:10px;padding:12px;">';
+  html += '<div style="font-size:.75rem;font-weight:600;margin-bottom:6px;">PRIORIDAD MÁXIMA</div>';
+  if(critical.length){
+    critical.forEach(c => {
+      html += '<div style="margin-bottom:6px;"><strong>'+c.icon+' '+c.title+'</strong> — '+c.satisfaction+'% satisfacción (promedio '+c.avg.toFixed(2)+'/5)</div>';
+    });
+  } else {
+    html += '<div>No hay departamentos en zona crítica.</div>';
+  }
+  html += '</div>';
+
+  html += '<div style="background:var(--palm);color:#fff;border-radius:10px;padding:12px;">';
+  html += '<div style="font-size:.75rem;font-weight:600;margin-bottom:6px;">FORTALEZAS A MANTENER</div>';
+  if(excellent.length){
+    excellent.forEach(e => {
+      html += '<div style="margin-bottom:6px;"><strong>'+e.icon+' '+e.title+'</strong> — '+e.satisfaction+'% satisfacción</div>';
+    });
+  } else {
+    html += '<div>No hay departamentos con excelencia aún.</div>';
+  }
+  html += '</div></div>';
+
+  html += '<ul style="margin:0;padding-left:20px;font-size:.85rem;color:var(--ink);line-height:1.7;">'+recs.join('')+'</ul></div>';
+  return html;
+}
+
 function buildDeptAnalysis(filteredResponses, sectionStatsByAvg){
   const deptKeywords = {
     recepcion: {
@@ -1421,13 +1458,6 @@ function renderAnalisis(){
     elHtml += '<p style="color:var(--palm);font-size:.82rem;">No hay datos del año anterior para comparar. Se necesitan respuestas con fechas del mismo periodo en el año previo.</p></div>';
   }
 
-  elHtml += '<div class="panel-card"><h3>Huéspedes Más Frecuentes</h3><div style="overflow-x:auto;">';
-  elHtml += '<table class="data-table"><thead><tr><th>Habitación</th><th>Visitas</th><th>Promedio</th><th>Satisfacción</th></tr></thead><tbody>';
-  roomList.slice(0,15).forEach(r => {
-    elHtml += '<tr><td><strong>'+r.hab+'</strong></td><td>'+r.count+'</td><td>'+r.avg.toFixed(2)+'</td><td style="color:'+(r.sat>=70?'var(--palm)':r.sat>=50?'var(--gold)':'var(--coral)')+';">'+r.sat+'%</td></tr>';
-  });
-  elHtml += '</tbody></table></div></div>';
-
   elHtml += '<div class="panel-card"><h3>Top Departamentos con Más Calificaciones Positivas (1-2)</h3><div style="overflow-x:auto;">';
   elHtml += '<table class="data-table"><thead><tr><th>#</th><th>Departamento</th><th>% Positivas</th><th>Barra</th></tr></thead><tbody>';
   sortedTop3.forEach((s,i) => {
@@ -1444,32 +1474,7 @@ function renderAnalisis(){
   });
   elHtml += '</tbody></table></div></div>';
 
-  if(topWords.length){
-    elHtml += '<div class="panel-card"><h3>Palabras Más Frecuentes en Comentarios</h3><div style="overflow-x:auto;">';
-    elHtml += '<table class="data-table"><thead><tr><th>#</th><th>Palabra</th><th>Frecuencia</th><th>Barra</th></tr></thead><tbody>';
-    const maxWord = topWords[0].count;
-    topWords.forEach((w,i) => {
-      elHtml += '<tr><td>'+(i+1)+'</td><td><strong>'+w.word+'</strong></td><td>'+w.count+'</td>';
-      elHtml += '<td><div style="background:var(--line);border-radius:4px;height:14px;width:100%;position:relative;"><div style="background:var(--sea);height:100%;width:'+Math.round((w.count/maxWord)*100)+'%;border-radius:4px;"></div></div></td></tr>';
-    });
-    elHtml += '</tbody></table></div></div>';
-  }
-
-  if(topCorr.length){
-    elHtml += '<div class="panel-card"><h3>Correlaciones más Fuertes entre Preguntas</h3><p style="font-size:.78rem;color:var(--palm);margin:-8px 0 12px;">Coeficiente de Pearson (r): positivo = relación directa, negativo = relación inversa</p><div style="overflow-x:auto;">';
-    elHtml += '<table class="data-table"><thead><tr><th>Pregunta 1</th><th>Pregunta 2</th><th>Correlación</th><th>Fuerza</th><th>N</th></tr></thead><tbody>';
-    topCorr.forEach(c => {
-      const absC = Math.abs(c.corr);
-      const fuerza = absC>0.7?'Muy fuerte':absC>0.5?'Fuerte':absC>0.3?'Moderada':absC>0.1?'Débil':'Muy débil';
-      const color = absC>0.5?'var(--palm)':absC>0.3?'var(--gold)':'var(--ink)';
-      elHtml += '<tr><td>'+c.q1.q.es+' ('+c.q1.sec.title+')</td><td>'+c.q2.q.es+' ('+c.q2.sec.title+')</td><td><strong style="color:'+color+';">'+c.corr.toFixed(3)+'</strong></td><td>'+fuerza+'</td><td>'+c.count+'</td></tr>';
-    });
-    elHtml += '</tbody></table></div></div>';
-  }
-
-  elHtml += '<div class="panel-card"><h3>Recomendaciones</h3><div style="font-size:.88rem;color:var(--ink);line-height:1.6;">';
-  elHtml += '<p style="margin:0 0 10px;">Basado en el análisis de <strong>'+filteredResponses.length+'</strong> respuestas ('+allVals.length+' calificaciones en '+dates.length+' días):</p>';
-  elHtml += '<ul style="margin:0;padding-left:20px;">'+recs.join('')+'</ul></div></div>';
+  elHtml += buildRecommendationsCard(recs, filteredResponses, allVals, dates, sectionStatsByAvg);
 
   elHtml += buildDeptAnalysis(filteredResponses, sectionStatsByAvg);
 
