@@ -879,7 +879,7 @@ function renderResumen(){
     </div>
 
     <div class="panel-card">
-      <h3>Tendencia diaria</h3>
+      <h3>Tendencia semanal</h3>
       <div class="chart-wrap tall"><canvas id="chart_trend"></canvas></div>
     </div>
 
@@ -889,18 +889,41 @@ function renderResumen(){
     </div>
   `;
 
-  const dayMap = {};
-  filtered.forEach(r => { if(!dayMap[r.fecha]) dayMap[r.fecha] = []; dayMap[r.fecha].push(r); });
-  const days = Object.keys(dayMap).sort();
-  const dayCounts = days.map(d => dayMap[d].length);
-  const daySat = days.map(d => globalSatisfaction(dayMap[d]));
+  function getWeekLabel(dateStr) {
+    const d = new Date(dateStr);
+    const startOfWeek = new Date(d);
+    startOfWeek.setDate(d.getDate() - d.getDay());
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    const s = (startOfWeek.getMonth()+1)+'/'+startOfWeek.getDate();
+    const e = (endOfWeek.getMonth()+1)+'/'+endOfWeek.getDate();
+    return s+'-'+e;
+  }
+
+  function getWeekKey(dateStr) {
+    const d = new Date(dateStr);
+    const startOfWeek = new Date(d);
+    startOfWeek.setDate(d.getDate() - d.getDay());
+    return startOfWeek.toISOString().slice(0,10);
+  }
+
+  const weekMap = {};
+  filtered.forEach(r => {
+    const wk = getWeekKey(r.fecha);
+    if(!weekMap[wk]) weekMap[wk] = [];
+    weekMap[wk].push(r);
+  });
+  const weekKeys = Object.keys(weekMap).sort();
+  const weekLabels = weekKeys.map(getWeekLabel);
+  const weekCounts = weekKeys.map(wk => weekMap[wk].length);
+  const weekSat = weekKeys.map(wk => globalSatisfaction(weekMap[wk]));
 
   charts.resumen_trend = new Chart(document.getElementById('chart_trend'), {
     data:{
-      labels: days.map(d=>d.slice(5)),
+      labels: weekLabels,
       datasets:[
-        {type:'bar', label:'Respuestas', data:dayCounts, backgroundColor:'rgba(15,76,74,0.18)', yAxisID:'y1', borderRadius:4},
-        {type:'line', label:'Satisfacción %', data:daySat, borderColor:'#E8622C', backgroundColor:'#E8622C', tension:.35, yAxisID:'y2', spanGaps:true}
+        {type:'bar', label:'Respuestas', data:weekCounts, backgroundColor:'rgba(15,76,74,0.18)', yAxisID:'y1', borderRadius:4},
+        {type:'line', label:'Satisfacción %', data:weekSat, borderColor:'#E8622C', backgroundColor:'#E8622C', tension:.35, yAxisID:'y2', spanGaps:true}
       ]
     },
     options:{
@@ -1432,8 +1455,8 @@ function renderAnalisis(){
   });
   elHtml += '</tbody></table></div></div>';
 
-  elHtml += '<div class="panel-card"><h3>Tendencia de Satisfacción</h3>';
-  elHtml += '<div style="font-size:.82rem;color:var(--palm);margin-bottom:10px;">Tendencia últimos días: <strong style="color:'+(trend>=0?'var(--palm)':'var(--coral)')+';">'+(trend>=0?'+':'')+(trend/0.04).toFixed(1)+'%</strong></div>';
+  elHtml += '<div class="panel-card"><h3>Tendencia Semanal de Satisfacción</h3>';
+  elHtml += '<div style="font-size:.82rem;color:var(--palm);margin-bottom:10px;">Tendencia semanas: <strong style="color:'+(trend>=0?'var(--palm)':'var(--coral)')+';">'+(trend>=0?'+':'')+(trend/0.04).toFixed(1)+'%</strong></div>';
   elHtml += '<div class="chart-wrap tall"><canvas id="chart_analisis_trend"></canvas></div></div>';
 
   elHtml += '<div class="panel-card"><h3>Satisfacción por Día de la Semana</h3><div style="overflow-x:auto;">';
@@ -1547,22 +1570,43 @@ function renderAnalisis(){
     }
   });
 
-  const trendDays = [];
-  for(let ti = Math.min(13, dates.length - 1); ti >= 0; ti--){
-    trendDays.push(dates[dates.length - 1 - ti]);
+  function getWeekKeyA(dateStr) {
+    const d = new Date(dateStr);
+    const startOfWeek = new Date(d);
+    startOfWeek.setDate(d.getDate() - d.getDay());
+    return startOfWeek.toISOString().slice(0,10);
   }
-  const trendAvgs = trendDays.map(d => {
-    const dayRatings = [];
-    byDate[d].forEach(r => Object.values(r.ratings).forEach(v => { if(v) dayRatings.push(v); }));
-    return dayRatings.length ? dayRatings.reduce((a,b) => a+b, 0) / dayRatings.length : null;
+  function getWeekLabelA(dateStr) {
+    const d = new Date(dateStr);
+    const startOfWeek = new Date(d);
+    startOfWeek.setDate(d.getDate() - d.getDay());
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    const s = (startOfWeek.getMonth()+1)+'/'+startOfWeek.getDate();
+    const e = (endOfWeek.getMonth()+1)+'/'+endOfWeek.getDate();
+    return s+'-'+e;
+  }
+
+  const weekMapA = {};
+  filteredResponses.forEach(r => {
+    const wk = getWeekKeyA(r.fecha);
+    if(!weekMapA[wk]) weekMapA[wk] = [];
+    weekMapA[wk].push(r);
+  });
+  const weekKeysA = Object.keys(weekMapA).sort();
+  const trendWeeks = weekKeysA.map(getWeekLabelA);
+  const trendAvgs = weekKeysA.map(wk => {
+    const wkRatings = [];
+    weekMapA[wk].forEach(r => Object.values(r.ratings).forEach(v => { if(v) wkRatings.push(v); }));
+    return wkRatings.length ? wkRatings.reduce((a,b) => a+b, 0) / wkRatings.length : null;
   });
 
   charts.analisis_trend = new Chart(document.getElementById('chart_analisis_trend'), {
     type:'line',
     data:{
-      labels: trendDays.map(d => d.slice(5)),
+      labels: trendWeeks,
       datasets:[{
-        label:'Promedio diario', data:trendAvgs, borderColor:'#0F4C4A',
+        label:'Promedio semanal', data:trendAvgs, borderColor:'#0F4C4A',
         backgroundColor:'rgba(15,76,74,0.1)', fill:true, tension:.3, spanGaps:true,
         pointRadius:4, pointBackgroundColor:'#E8622C'
       }]
