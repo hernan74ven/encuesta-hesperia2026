@@ -1472,6 +1472,54 @@ function renderAnalisis(){
   elHtml += '<ul style="margin:0;padding-left:20px;">'+recs.join('')+'</ul></div></div>';
 
   elHtml += buildDeptAnalysis(filteredResponses, sectionStatsByAvg);
+
+  elHtml += '<div class="panel-card"><h3>Top 5 Huéspedes — Mejores y Peores Experiencias</h3>';
+  elHtml += '<div style="font-size:.82rem;color:var(--palm);margin:-8px 0 16px;">Análisis basado en el promedio de calificaciones por huésped (1=excelente, 5=deficiente).</div>';
+
+  const guestData = filteredResponses.map(r => {
+    const vals = Object.values(r.ratings || {}).filter(v => v);
+    const avg = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    return { ...r, avg, count: vals.length };
+  }).filter(g => g.avg !== null && g.count >= 3);
+
+  const best5 = guestData.slice().sort((a,b) => a.avg - b.avg).slice(0,5);
+  const worst5 = guestData.slice().sort((a,b) => b.avg - a.avg).slice(0,5);
+
+  elHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">';
+
+  elHtml += '<div><div style="font-size:.85rem;font-weight:600;color:var(--palm);margin-bottom:10px;">🏆 Top 5 Mejores</div>';
+  best5.forEach((g, i) => {
+    const name = g.nombre || g.apellidos || 'Sin nombre';
+    const hab = g.habitacion || '—';
+    elHtml += '<div style="background:var(--sand-light);border-radius:8px;padding:10px;margin-bottom:8px;border-left:3px solid var(--palm);">';
+    elHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+    elHtml += '<span style="font-weight:600;font-size:.82rem;color:var(--sea-deep);">#'+(i+1)+' '+name+'</span>';
+    elHtml += '<span style="font-family:IBM Plex Mono;font-weight:700;font-size:.9rem;color:var(--palm);">'+g.avg.toFixed(2)+'</span></div>';
+    elHtml += '<div style="font-size:.72rem;color:var(--palm);">Hab: '+hab+' | '+g.fecha+'</div>';
+    if(g.masGusto) elHtml += '<div style="font-size:.75rem;color:var(--ink);margin-top:4px;"><span style="color:var(--palm);">[+]</span> '+escapeHtml(g.masGusto)+'</div>';
+    if(g.menosGusto) elHtml += '<div style="font-size:.75rem;color:var(--ink);"><span style="color:var(--coral);">[-]</span> '+escapeHtml(g.menosGusto)+'</div>';
+    if(g.sugerencias) elHtml += '<div style="font-size:.75rem;color:var(--ink);"><span style="color:var(--gold);">[~]</span> '+escapeHtml(g.sugerencias)+'</div>';
+    elHtml += '</div>';
+  });
+  elHtml += '</div>';
+
+  elHtml += '<div><div style="font-size:.85rem;font-weight:600;color:var(--coral);margin-bottom:10px;">⚠️ Top 5 Peores</div>';
+  worst5.forEach((g, i) => {
+    const name = g.nombre || g.apellidos || 'Sin nombre';
+    const hab = g.habitacion || '—';
+    elHtml += '<div style="background:var(--sand-light);border-radius:8px;padding:10px;margin-bottom:8px;border-left:3px solid var(--coral);">';
+    elHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+    elHtml += '<span style="font-weight:600;font-size:.82rem;color:var(--sea-deep);">#'+(i+1)+' '+name+'</span>';
+    elHtml += '<span style="font-family:IBM Plex Mono;font-weight:700;font-size:.9rem;color:var(--coral);">'+g.avg.toFixed(2)+'</span></div>';
+    elHtml += '<div style="font-size:.72rem;color:var(--palm);">Hab: '+hab+' | '+g.fecha+'</div>';
+    if(g.masGusto) elHtml += '<div style="font-size:.75rem;color:var(--ink);margin-top:4px;"><span style="color:var(--palm);">[+]</span> '+escapeHtml(g.masGusto)+'</div>';
+    if(g.menosGusto) elHtml += '<div style="font-size:.75rem;color:var(--ink);"><span style="color:var(--coral);">[-]</span> '+escapeHtml(g.menosGusto)+'</div>';
+    if(g.sugerencias) elHtml += '<div style="font-size:.75rem;color:var(--ink);"><span style="color:var(--gold);">[~]</span> '+escapeHtml(g.sugerencias)+'</div>';
+    if(g.comentarios) elHtml += '<div style="font-size:.75rem;color:var(--ink);"><span style="color:var(--sea);">[*]</span> '+escapeHtml(g.comentarios)+'</div>';
+    elHtml += '</div>';
+  });
+  elHtml += '</div></div></div>';
+
   elHtml += '</div>';
   el.innerHTML = elHtml;
 
