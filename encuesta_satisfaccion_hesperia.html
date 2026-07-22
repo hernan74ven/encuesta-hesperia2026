@@ -1456,7 +1456,7 @@ function renderAnalisis(){
   elHtml += '</tbody></table></div></div>';
 
   elHtml += '<div class="panel-card"><h3>Tendencia Semanal de Satisfacción</h3>';
-  elHtml += '<div style="font-size:.82rem;color:var(--palm);margin-bottom:10px;">Tendencia semanas: <strong style="color:'+(trend>=0?'var(--palm)':'var(--coral)')+';">'+(trend>=0?'+':'')+(trend/0.04).toFixed(1)+'%</strong></div>';
+  elHtml += '<div style="font-size:.82rem;color:var(--palm);margin-bottom:10px;">Tendencia semanas: <strong style="color:'+(trend<=0?'var(--palm)':'var(--coral)')+';">'+(trend<=0?'↓ Mejora':'↓ Peora')+' ('+Math.abs(trend/0.04).toFixed(1)+'%)</strong></div>';
   elHtml += '<div class="chart-wrap tall"><canvas id="chart_analisis_trend"></canvas></div></div>';
 
   elHtml += '<div class="panel-card"><h3>Satisfacción por Día de la Semana</h3><div style="overflow-x:auto;">';
@@ -1475,7 +1475,7 @@ function renderAnalisis(){
     elHtml += '<table class="data-table"><thead><tr><th>Métrica</th><th>Periodo actual</th><th>Mismo periodo año anterior</th><th>Variación</th></tr></thead><tbody>';
     elHtml += '<tr><td><strong>Respuestas</strong></td><td>'+lyd.current.count+'</td><td>'+lyd.previous.count+'</td><td style="color:'+(lyd.current.count>=lyd.previous.count?'var(--palm)':'var(--coral)')+';">'+(lyd.current.count-lyd.previous.count>0?'+':'')+(lyd.current.count-lyd.previous.count)+'</td></tr>';
     elHtml += '<tr><td><strong>Satisfacción Global</strong></td><td>'+lyd.current.sat+'%</td><td>'+lyd.previous.sat+'%</td><td style="color:'+(lyd.current.sat>=lyd.previous.sat?'var(--palm)':'var(--coral)')+';">'+(lyd.current.sat-lyd.previous.sat>0?'+':'')+(lyd.current.sat-lyd.previous.sat).toFixed(1)+' pp</td></tr>';
-    elHtml += '<tr><td><strong>Promedio</strong></td><td>'+lyd.current.avg.toFixed(2)+'</td><td>'+lyd.previous.avg.toFixed(2)+'</td><td style="color:'+(lyd.current.avg>=lyd.previous.avg?'var(--palm)':'var(--coral)')+';">'+(lyd.current.avg-lyd.previous.avg>0?'+':'')+(lyd.current.avg-lyd.previous.avg).toFixed(2)+'</td></tr>';
+    elHtml += '<tr><td><strong>Promedio</strong></td><td>'+lyd.current.avg.toFixed(2)+'</td><td>'+lyd.previous.avg.toFixed(2)+'</td><td style="color:'+(lyd.current.avg<=lyd.previous.avg?'var(--palm)':'var(--coral)')+';">'+(lyd.current.avg-lyd.previous.avg>0?'+':'')+(lyd.current.avg-lyd.previous.avg).toFixed(2)+'</td></tr>';
     elHtml += '</tbody></table></div></div>';
   } else {
     elHtml += '<p style="color:var(--palm);font-size:.82rem;">No hay datos del año anterior para comparar. Se necesitan respuestas con fechas del mismo periodo en el año previo.</p></div>';
